@@ -273,21 +273,25 @@ class DLLInjector:
         Inject DLL by directly interacting with DLL Injector GUI
         """
         try:
-            # Launch DLL Injector
-            logger.info("Launching DLL Injector...")
-            os.startfile(self.dll_injector_path)
-            time.sleep(3)  # Wait for application to launch
-
-            # Find and activate DLL Injector window
+            # First check if DLL Injector is already open
             windows = gw.getWindowsWithTitle("DLL Injector")
             if not windows:
-                logger.error("Could not find DLL Injector window")
-                return False
+                # Launch DLL Injector if not found
+                logger.info("DLL Injector not found, launching...")
+                os.startfile(self.dll_injector_path)
+                time.sleep(3)  # Wait for application to launch
+                
+                # Check again for the window
+                windows = gw.getWindowsWithTitle("DLL Injector")
+                if not windows:
+                    logger.error("Could not find DLL Injector window after launch")
+                    return False
+            else:
+                logger.info("Found existing DLL Injector window, activating...")
 
             window = windows[0]
             window.activate()
             time.sleep(1)
-
             # Get process name from PID
             try:
                 process = psutil.Process(pid)
@@ -297,23 +301,27 @@ class DLLInjector:
                 logger.error(f"Error getting process name: {e}")
                 return False
 
-            # Click sequence based on the AHK script
-            # Open dialog for file selection
-            logger.info("Selecting target process...")
-            self.click_relative(window, 200, 135)
-            time.sleep(2)
-
             # Input file name
-            self.click_relative(window, 55, 112)
-            pg.hotkey('ctrl', 'a')  # Select all
-            pg.press('backspace')  # Clear selection
-            pg.write(str(pid))  # Type PID instead of process name
+            self.click_relative(window, 100, 115)
+            time.sleep(1)
+            
+            # Select all text using explicit key presses
+            pg.keyDown('ctrl')
+            time.sleep(0.1)  # Small delay to ensure ctrl is registered
+            pg.press('a')
+            time.sleep(0.1)  # Small delay before releasing ctrl
+            pg.keyUp('ctrl')
+            time.sleep(1)
+
+            # Clear selection
+            pg.press('backspace')
+            time.sleep(0.5)
+
+            # Type the PID
+            pg.write(str(pid))
             time.sleep(2)
 
             # Select exe
-            logger.info("Selecting executable...")
-            self.click_relative(window, 55, 135)
-            time.sleep(2)
 
             # Select dll
             logger.info("Selecting DLL...")
@@ -429,6 +437,5 @@ if __name__ == "__main__":
         game_folder = sys.argv[1]
     if len(sys.argv) > 2:
         dll_injector_path = sys.argv[2]
-        
     injector = DLLInjector(game_folder, dll_injector_path)
     injector.run_injection_process()
