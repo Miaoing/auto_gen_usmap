@@ -14,10 +14,11 @@ logger = logging.getLogger()
 
 
 class SteamOKController:
-    def __init__(self):
+    def __init__(self, excel_path='result/games.xlsx'):
         self.results = {}  # 存储游戏检查结果
         self.current_game_index = 0  # 当前处理的游戏索引
         self.error_messages = {}  # 存储游戏安装失败的错误信息
+        self.excel_path = excel_path  # Excel文件路径
 
     def _format_game_name(self, game_name):
         """格式化游戏名称，只保留中文和英文字母字符"""
@@ -191,9 +192,9 @@ class SteamOKController:
                 
                 # 更新Excel文件
                 try:
-                    df = pd.read_excel('result/games.xlsx')
+                    df = pd.read_excel(self.excel_path)
                     df.iloc[self.current_game_index, 2] = screenshot_path
-                    df.to_excel('result/games.xlsx', index=False)
+                    df.to_excel(self.excel_path, index=False)
                 except Exception as e:
                     logger.error(f"Error updating Excel with detail screenshot: {e}")
                 
@@ -600,7 +601,7 @@ class SteamOKController:
         """保存单个游戏的检查结果到Excel文件"""
         try:
             # 使用pandas更新基本信息
-            df = pd.read_excel('result/games.xlsx')
+            df = pd.read_excel(self.excel_path)
             game_index = df.index[df.iloc[:, 1] == game_name].tolist()
             if game_index:
                 # 更新游戏状态（第三列）
@@ -610,12 +611,13 @@ class SteamOKController:
                     df.iloc[game_index[0], 3] = error_msg
 
             # 保存更新后的Excel文件
-            df.to_excel('result/games.xlsx', index=False)
-            logger.info(f"Result saved to games.xlsx for game: {game_name}")
+            df.to_excel(self.excel_path, index=False)
+            logger.info(f"Result saved to {self.excel_path} for game: {game_name}")
 
             # 同时保存到txt文件作为备份
-            os.makedirs('result', exist_ok=True)
-            with open('result/game_results.txt', 'a', encoding='utf-8') as f:
+            os.makedirs(os.path.dirname(self.excel_path), exist_ok=True)
+            txt_path = os.path.join(os.path.dirname(self.excel_path), 'game_results.txt')
+            with open(txt_path, 'a', encoding='utf-8') as f:
                 status = "可以开玩" if available else "不可开玩"
                 error_info = f" (错误: {error_msg})" if not available and error_msg else ""
                 f.write(f"{game_name}: {status}{error_info}\n")
@@ -626,7 +628,7 @@ class SteamOKController:
     def save_results(self):
         """保存检查结果到Excel文件"""
         try:
-            df = pd.read_excel('result/games.xlsx')
+            df = pd.read_excel(self.excel_path)
             for game, available in self.results.items():
                 # 在Excel中找到对应的游戏行
                 game_index = df.index[df.iloc[:, 0] == game].tolist()
@@ -638,11 +640,12 @@ class SteamOKController:
                         df.iloc[game_index[0], 2] = self.error_messages[game_name]
 
             # 保存更新后的Excel文件
-            df.to_excel('result/games.xlsx', index=False)
-            logger.info("Results saved to games.xlsx")
+            df.to_excel(self.excel_path, index=False)
+            logger.info(f"Results saved to {self.excel_path}")
             
             # 同时保存到txt文件作为备份
-            with open('result/game_results.txt', 'w', encoding='utf-8') as f:
+            txt_path = os.path.join(os.path.dirname(self.excel_path), 'game_results.txt')
+            with open(txt_path, 'w', encoding='utf-8') as f:
                 for game, available in self.results.items():
                     status = "可以开玩" if available else "不可开玩"
                     error_info = f" (错误: {self.error_messages[game]})" if not available and game in self.error_messages else ""
