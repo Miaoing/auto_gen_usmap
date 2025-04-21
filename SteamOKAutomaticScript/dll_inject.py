@@ -11,13 +11,14 @@ from logger import setup_logging
 logger = setup_logging()
 
 class DLLInjector:
-    def __init__(self, game_folder=None):
-        self.injector_path = "C:\\Users\\Administrator\\Documents\\AutoHotkey\\inject.exe"
+    def __init__(self, game_folder, dll_injector_path="E:\\DLLInjector.lnk"):
+        self.game_folder = game_folder
+        self.dll_injector_path = dll_injector_path
         self.playable_image_paths = [
             (os.path.join(os.path.dirname(__file__), "png/playable.png"), 0.8),
             (os.path.join(os.path.dirname(__file__), "png/start_game.png"), 0.75)
         ]
-        self.game_folder = game_folder  # Game folder path passed as an argument
+        self.start_game2_path = os.path.join(os.path.dirname(__file__), "png/start_game2.png")
         
     def activate_steam_window(self):
         """Activate Steam window and bring it to the front"""
@@ -247,89 +248,122 @@ class DLLInjector:
         
         return {"pid": pid, "name": name, "exe": exe}
     
-    def inject_dll(self, pid):
-        """
-        Inject DLL into the game process using inject.exe
-        """
-        if not os.path.exists(self.injector_path):
-            logger.error(f"Injector executable not found at: {self.injector_path}")
-            return False
-        
+    def click_relative(self, window, x_ratio, y_ratio):
+        """Click at a position relative to window size"""
         try:
-            logger.info(f"Running injector with PID: {pid}")
-            cmd = f'"{self.injector_path}" {pid}'
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-            
-            if result.returncode == 0:
-                logger.info("Injection successful")
-                return True
-            else:
-                logger.error(f"Injection failed with return code {result.returncode}")
-                logger.error(f"Error output: {result.stderr}")
-                return False
-                
+            # Get window position and size
+            left, top, right, bottom = window.left, window.top, window.right, window.bottom
+            width = right - left
+            height = bottom - top
+
+            # Calculate actual coordinates
+            x = left + int(width * (x_ratio / 300))
+            y = top + int(height * (y_ratio / 400))
+
+            # Click at the calculated position
+            pg.click(x, y)
+            time.sleep(0.5)  # Small delay after click
+            return True
         except Exception as e:
-            logger.error(f"Error running injector: {str(e)}")
+            logger.error(f"Error in click_relative: {e}")
             return False
 
-    def minimize_window_by_pid(self, pid):
+    def inject_dll(self, pid):
         """
-        Minimize a window associated with the given PID.
-        For full-screen games, tries several approaches.
+        Inject DLL by directly interacting with DLL Injector GUI
         """
         try:
-            logger.info(f"Attempting to minimize window for PID {pid}")
-            
-            # First approach: Try using pygetwindow to find and minimize the window directly
-            window_found = False
+            # Launch DLL Injector
+            logger.info("Launching DLL Injector...")
+            os.startfile(self.dll_injector_path)
+            time.sleep(3)  # Wait for application to launch
+
+            # Find and activate DLL Injector window
+            windows = gw.getWindowsWithTitle("DLL Injector")
+            if not windows:
+                logger.error("Could not find DLL Injector window")
+                return False
+
+            window = windows[0]
+            window.activate()
+            time.sleep(1)
+
+            # Get process name from PID
             try:
-                all_windows = gw.getAllWindows()
-                logger.info(f"Found {len(all_windows)} windows total")
-                
-                for window in all_windows:
-                    try:
-                        window_pid = gw._getWindowPid(window._hWnd)
-                        # Log all windows with title for debugging
-                        if window.title:
-                            logger.info(f"Window: '{window.title}' (PID: {window_pid})")
-                        
-                        if window_pid == pid:
-                            logger.info(f"Found matching window for PID {pid}: '{window.title}'")
-                            window_found = True
-                            window.minimize()
-                            logger.info(f"Minimized window: '{window.title}'")
-                            return True
-                    except Exception as e:
-                        logger.error(f"Error checking window: {str(e)}")
-                        continue  # Skip this window if we can't get its PID
+                process = psutil.Process(pid)
+                process_name = process.name().lower()
+                logger.info(f"Target process: {process_name} (PID: {pid})")
             except Exception as e:
-                logger.error(f"Error in window enumeration: {str(e)}")
+                logger.error(f"Error getting process name: {e}")
+                return False
+
+            # Click sequence based on the AHK script
+            # Open dialog for file selection
+            logger.info("Selecting target process...")
+            self.click_relative(window, 200, 135)
+            time.sleep(2)
+
+            # Input file name
+            self.click_relative(window, 55, 112)
+            pg.hotkey('ctrl', 'a')  # Select all
+            pg.press('backspace')  # Clear selection
+            pg.write(str(pid))  # Type PID instead of process name
+            time.sleep(2)
+
+            # Select exe
+            logger.info("Selecting executable...")
+            self.click_relative(window, 55, 135)
+            time.sleep(2)
+
+            # Select dll
+            logger.info("Selecting DLL...")
+            self.click_relative(window, 200, 135)
+            time.sleep(2)
+
+            # Final click (possibly menu or inject button)
+            logger.info("Initiating injection...")
+            self.click_relative(window, 250, 15)
+            time.sleep(2)
+
+            # Check for new DLL Injector processes to verify injection
+            after_processes = {(p.pid, p.name()) for p in psutil.process_iter(['pid', 'name'])}
+            dll_injector_count = sum(1 for _, name in after_processes if "DLL Injector" in name)
             
-            if not window_found:
-                logger.warning(f"Could not find any window associated with PID {pid}")
-                
-                # Second approach: For full-screen games, try Alt+Tab to switch away
-                logger.info("Trying Alt+Tab approach for full-screen game...")
-                pg.keyDown('alt')
-                pg.press('tab')
-                time.sleep(0.5)
-                pg.keyUp('alt')
-                time.sleep(0.5)
-                
-                # Third approach: Try Win+D to minimize all windows
-                # logger.info("Trying Win+D to minimize all windows...")
-                # pg.keyDown('winleft')
-                # pg.press('d')
-                # pg.keyUp('winleft')
-                # time.sleep(0.5)
-                
-                logger.info("Attempted alternative minimization approaches")
-                return True  # Return true since we tried our best
-                
-            return False
+            if dll_injector_count > 1:  # More than just the main GUI process
+                logger.info(f"Found {dll_injector_count} DLL Injector processes - injection likely successful")
+                return True
+            else:
+                logger.error("No additional DLL Injector processes detected")
+                return False
+
         except Exception as e:
-            logger.error(f"Error minimizing window for PID {pid}: {str(e)}")
+            logger.error(f"Error during injection process: {e}")
             return False
+
+    def check_and_click_start_game2(self, max_retries=5, retry_interval=2):
+        """
+        Check for and click the start_game2.png button if it appears
+        Returns True if button was found and clicked, False otherwise
+        """
+        logger.info("Checking for Steam launch options...")
+        for i in range(max_retries):
+            try:
+                start_game2_location = pg.locateOnScreen(self.start_game2_path, confidence=0.75)
+                if start_game2_location:
+                    logger.info("Found Steam launch options button")
+                    start_game2_center = pg.center(start_game2_location)
+                    pg.click(start_game2_center)
+                    logger.info("Clicked Steam launch options button")
+                    time.sleep(2)  # Wait for the options to appear
+                    return True
+                logger.info(f"Steam launch options not found, retrying ({i+1}/{max_retries})...")
+                time.sleep(retry_interval)
+            except Exception as e:
+                logger.error(f"Error checking for Steam launch options: {str(e)}")
+                time.sleep(retry_interval)
+        
+        logger.info("No Steam launch options found after maximum retries")
+        return False
 
     def run_injection_process(self):
         """
@@ -355,9 +389,13 @@ class DLLInjector:
             logger.error("Failed to find and click playable button")
             return False
         
+        # Step 3.5: Check for and handle Steam launch options
+        logger.info("Checking for Steam launch options...")
+        self.check_and_click_start_game2()
+        
         # Step 4: Wait for the game process to start
-        logger.info(f"Waiting 60 seconds for game to launch...")
-        time.sleep(60)  # Increased wait time for game launch
+        logger.info(f"Waiting for game to launch...")
+        time.sleep(10)  # Wait time for game launch
         
         # Step 5: Get processes after waiting
         logger.info("Recording processes after game launch...")
@@ -370,15 +408,8 @@ class DLLInjector:
             logger.error("Failed to detect game process")
             return False
         
-        # Step 7: Minimize the game window before injection
+        # Step 7: Inject DLL into the game process
         pid = game_process["pid"]
-        logger.info(f"Attempting to minimize game window (PID: {pid})")
-        self.minimize_window_by_pid(pid)
-        
-        # Give the window a moment to minimize
-        time.sleep(1)
-        
-        # Step 8: Inject DLL into the game process
         if self.inject_dll(pid):
             logger.info(f"Successfully injected DLL into {game_process['name']} (PID: {pid})")
             return True
@@ -392,8 +423,12 @@ if __name__ == "__main__":
     
     # Check if a game folder was provided as a command line argument
     game_folder = None
+    dll_injector_path = "E:\\DLLInjector.lnk"
+    
     if len(sys.argv) > 1:
         game_folder = sys.argv[1]
+    if len(sys.argv) > 2:
+        dll_injector_path = sys.argv[2]
         
-    injector = DLLInjector(game_folder)
+    injector = DLLInjector(game_folder, dll_injector_path)
     injector.run_injection_process()
