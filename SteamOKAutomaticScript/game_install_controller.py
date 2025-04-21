@@ -268,22 +268,49 @@ class SteamOKController:
         try:
             logger.info("开始尝试点击安装按钮流程")
             time.sleep(1)
-            # 尝试通过OCR识别安装按钮
+            
+            # 尝试通过OCR识别安装按钮和reinstall按钮
             install_button_image = os.path.join(os.path.dirname(__file__), "png/install.png")
-            logger.info("尝试寻找安装按钮...")
-            install_button_location = pg.locateOnScreen(install_button_image, confidence=0.9)  # 提高精度
+            reinstall_button_image = os.path.join(os.path.dirname(__file__), "png/reInstall.png")
+            
+            logger.info("尝试寻找安装按钮和reinstall按钮...")
+            install_button_location = None
+            reinstall_button_location = None
+            
+            try:
+                install_button_location = pg.locateOnScreen(install_button_image, confidence=0.9)
+            except Exception as e:
+                logger.warning("未找到安装按钮，将在后续重试")
+                
+            try:
+                reinstall_button_location = pg.locateOnScreen(reinstall_button_image, confidence=0.9)
+            except Exception as e:
+                logger.debug("未找到reinstall按钮")
+            
             time.sleep(2)
-            # 保存安装按钮区域的截图
+            
+            # 如果找到reinstall按钮，优先点击它
+            if reinstall_button_location:
+                logger.info("找到reinstall按钮，优先点击")
+                reinstall_button_center = (
+                    reinstall_button_location[0] + reinstall_button_location[2] / 2,
+                    reinstall_button_location[1] + reinstall_button_location[3] / 2
+                )
+                pg.click(reinstall_button_center)
+                time.sleep(3)
+                logger.info("已点击reinstall按钮")
+                
+                # 重新检查安装按钮
+                try:
+                    install_button_location = pg.locateOnScreen(install_button_image, confidence=0.8)
+                except Exception as e:
+                    logger.warning("重新检查时未找到安装按钮")
+                
+                return True
+            
+            # 如果找到安装按钮，点击它
             if install_button_location:
-                install_button_region = (int(install_button_location[0]), int(install_button_location[1]), 
-                                      int(install_button_location[2]), int(install_button_location[3]))
-                install_button_screenshot = pg.screenshot(region=install_button_region)
-                install_screenshot_path = f"install_button.png"
-                install_button_screenshot.save(install_screenshot_path)
-                logger.info(f"已保存安装按钮区域截图到: {install_screenshot_path}")
-
-            if install_button_location:
-                # 找到安装按钮，点击按钮中心
+                logger.info("找到安装按钮")
                 install_button_center = (
                     install_button_location[0] + (install_button_location[2]) / 2,
                     install_button_location[1] + (install_button_location[3]) / 2
@@ -293,7 +320,7 @@ class SteamOKController:
                 logger.info("已点击安装按钮")
                 time.sleep(5)
 
-                # 检测许可协议的accept按钮，但不强制要求存在
+                # 检测许可协议的accept按钮
                 logger.info("开始检查是否存在许可协议accept按钮...")
                 accept_button_image = os.path.join(os.path.dirname(__file__), "png/accept.png")
                 try:
@@ -303,15 +330,6 @@ class SteamOKController:
 
                 if accept_button_location:
                     time.sleep(5)
-                    # 保存accept按钮区域的截图
-                    # accept_button_region = (int(accept_button_location[0]), int(accept_button_location[1]), 
-                    #                       int(accept_button_location[2]), int(accept_button_location[3]))
-                    # accept_button_screenshot = pg.screenshot(region=accept_button_region)
-                    # accept_screenshot_path = os.path.join("screenshots", "accept_button.png")
-                    # os.makedirs("screenshots", exist_ok=True)
-                    # accept_button_screenshot.save(accept_screenshot_path)
-                    # logger.info(f"已保存accept按钮区域截图到: {accept_screenshot_path}")
-                    
                     accept_button_center = (
                         accept_button_location[0] + accept_button_location[2] / 2,
                         accept_button_location[1] + accept_button_location[3] / 2
@@ -322,69 +340,7 @@ class SteamOKController:
                 else:
                     logger.info("未找到许可协议accept按钮，继续执行")
 
-                time.sleep(5)
-
-                # 检测是否出现reInstall按钮，如果出现则点击
-                logger.info("开始检查是否存在安装按钮...")
-                reinstall_button_image = os.path.join(os.path.dirname(__file__), "png/reInstall.png")
-                try:
-                    reinstall_button_location = pg.locateOnScreen(reinstall_button_image, confidence=0.65)
-                except Exception as e:
-                    reinstall_button_location = None
-
-                if reinstall_button_location:
-                    reinstall_button_center = (
-                        reinstall_button_location[0] + reinstall_button_location[2] / 2,
-                        reinstall_button_location[1] + reinstall_button_location[3] / 2
-                    )
-                    pg.click(reinstall_button_center)
-                    time.sleep(3)
-                    logger.info("检测到reInstall按钮并点击")
-                    
-                    # 重新检查安装按钮
-                    logger.info("重新检查安装按钮...")
-                    try:
-                        install_button_location = pg.locateOnScreen(install_button_image, confidence=0.8)
-                        if install_button_location:
-                            install_button_center = (
-                                install_button_location[0] + (install_button_location[2]) / 2,
-                                install_button_location[1] + (install_button_location[3]) / 2
-                            )
-                            pg.click(install_button_center)
-                            time.sleep(5)
-                            logger.info("已重新点击安装按钮")
-                            
-                            # 重新检查accept按钮
-                            try:
-                                accept_button_location = pg.locateOnScreen(accept_button_image, confidence=0.75)
-                                if accept_button_location:
-                                    time.sleep(5)
-                                    # 保存accept按钮区域的截图
-                                    # accept_button_region = (accept_button_location[0], accept_button_location[1], 
-                                    #                       accept_button_location[2], accept_button_location[3])
-                                    # accept_button_screenshot = pg.screenshot(region=accept_button_region)
-                                    # accept_screenshot_path = os.path.join("screenshots", "accept_button_recheck.png")
-                                    # os.makedirs("screenshots", exist_ok=True)
-                                    # accept_button_screenshot.save(accept_screenshot_path)
-                                    # logger.info(f"已保存重新检查时的accept按钮区域截图到: {accept_screenshot_path}")
-                                    
-                                    accept_button_center = (
-                                        accept_button_location[0] + accept_button_location[2] / 2,
-                                        accept_button_location[1] + accept_button_location[3] / 2
-                                    )
-                                    pg.click(accept_button_center)
-                                    time.sleep(3)
-                                    logger.info("已重新点击许可协议的accept按钮")
-                            except Exception as e:
-                                logger.info("重新检查时未找到accept按钮，继续执行")
-                    except Exception as e:
-                        logger.error("重新检查安装按钮失败")
-                        return False
-                else:
-                    logger.info("未检测到reInstall按钮，继续执行")
-
                 return True
-
             else:
                 logger.error("未找到安装按钮，请检查按钮图片是否正确或界面是否正确显示")
                 return False
@@ -550,7 +506,7 @@ class SteamOKController:
                     logger.info("成功检测并点击安装按钮")
                     install_success = True
                     break
-                time.sleep(50)
+                time.sleep(10)
 
 
             # 10次尝试后仍未成功

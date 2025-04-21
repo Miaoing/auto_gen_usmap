@@ -7,6 +7,7 @@ import psutil
 import pygetwindow as gw
 from datetime import datetime
 from logger import setup_logging
+import glob
 
 logger = setup_logging()
 
@@ -19,6 +20,7 @@ class DLLInjector:
             (os.path.join(os.path.dirname(__file__), "png/start_game.png"), 0.75)
         ]
         self.start_game2_path = os.path.join(os.path.dirname(__file__), "png/start_game2.png")
+        self.yunxu_path = os.path.join(os.path.dirname(__file__), "png/yunxu.png")
         
     def activate_steam_window(self):
         """Activate Steam window and bring it to the front"""
@@ -268,6 +270,119 @@ class DLLInjector:
             logger.error(f"Error in click_relative: {e}")
             return False
 
+    def get_latest_log_directory(self, base_path="C:\\Dumper-7\\log"):
+        """
+        Get the most recent log directory created after injection start time
+        """
+        try:
+            # Get all timestamp directories
+            directories = glob.glob(os.path.join(base_path, "*"))
+            if not directories:
+                logger.error("No log directories found")
+                return None
+
+            # Filter and get the latest directory created after injection start
+            valid_dirs = []
+            for dir_path in directories:
+                try:
+                    # Try to parse the directory name as a timestamp
+                    dir_name = os.path.basename(dir_path)
+                    dir_time = datetime.strptime(dir_name, "%Y%m%d_%H%M%S")
+                    valid_dirs.append((dir_time, dir_path))
+                except ValueError:
+                    continue
+
+            if not valid_dirs:
+                logger.error("No valid timestamp directories found")
+                return None
+
+            # Sort by timestamp and get the latest
+            latest_dir = max(valid_dirs, key=lambda x: x[0])[1]
+            logger.info(f"Found latest log directory: {latest_dir}")
+            return latest_dir
+
+        except Exception as e:
+            logger.error(f"Error finding latest log directory: {e}")
+            return None
+
+    def check_injection_status(self, max_wait_time=10*60, check_interval=2):
+        """
+        Check the injection status by monitoring log files
+        Returns: 
+            - True if injection succeeded
+            - False if injection failed
+            - None if still running after max_wait_time
+        """
+        start_time = time.time()
+        base_log_path = "C:\\Dumper-7\\log"
+        
+        while time.time() - start_time < max_wait_time:
+            # Get the latest log directory
+            log_dir = self.get_latest_log_directory(base_log_path)
+            if not log_dir:
+                time.sleep(check_interval)
+                continue
+
+            try:
+                # Check if process has ended
+                end_signal = os.path.exists(os.path.join(log_dir, "end.signal"))
+                
+                if end_signal:
+                    # Process has ended, check for success
+                    success_signal = os.path.exists(os.path.join(log_dir, "success.signal"))
+                    if success_signal:
+                        logger.info("Injection completed successfully")
+                        return True
+                    else:
+                        logger.error("Injection failed: process ended without success signal")
+                        return False
+
+                # Check if still running
+                running_signal = os.path.exists(os.path.join(log_dir, "running.signal"))
+                if running_signal:
+                    logger.info("Injection still running...")
+                    time.sleep(check_interval)
+                    continue
+                
+                # If neither end.signal nor running.signal exists, something went wrong
+                logger.error("Injection failed: neither running.signal nor end.signal found")
+                return False
+                
+            except Exception as e:
+                logger.error(f"Error checking injection status: {e}")
+                return False
+
+            time.sleep(check_interval)
+
+        logger.error(f"Injection status check timed out after {max_wait_time} seconds")
+        return None
+
+    def terminate_process(self, pid):
+        """
+        Terminate a process by its PID
+        Returns True if successful, False otherwise
+        """
+        try:
+            process = psutil.Process(pid)
+            process.terminate()
+            
+            # Wait for the process to terminate
+            try:
+                process.wait(timeout=10)  # Wait up to 10 seconds
+            except psutil.TimeoutExpired:
+                # If timeout, try to kill it forcefully
+                process.kill()
+                process.wait(timeout=5)
+                
+            logger.info(f"Successfully terminated process with PID: {pid}")
+            return True
+        except psutil.NoSuchProcess:
+            logger.info(f"Process with PID {pid} no longer exists")
+            return True
+        except Exception as e:
+            logger.error(f"Error terminating process {pid}: {e}")
+            return False
+
     def inject_dll(self, pid):
         """
         Inject DLL by directly interacting with DLL Injector GUI
@@ -292,6 +407,7 @@ class DLLInjector:
             window = windows[0]
             window.activate()
             time.sleep(1)
+
             # Get process name from PID
             try:
                 process = psutil.Process(pid)
@@ -307,9 +423,9 @@ class DLLInjector:
             
             # Select all text using explicit key presses
             pg.keyDown('ctrl')
-            time.sleep(0.1)  # Small delay to ensure ctrl is registered
+            time.sleep(0.1)
             pg.press('a')
-            time.sleep(0.1)  # Small delay before releasing ctrl
+            time.sleep(0.1)
             pg.keyUp('ctrl')
             time.sleep(1)
 
@@ -322,6 +438,9 @@ class DLLInjector:
             time.sleep(2)
 
             # Select exe
+            logger.info("Selecting exe...")
+            self.click_relative(window, 100, 135)
+            time.sleep(2)
 
             # Select dll
             logger.info("Selecting DLL...")
@@ -333,19 +452,28 @@ class DLLInjector:
             self.click_relative(window, 250, 15)
             time.sleep(2)
 
-            # Check for new DLL Injector processes to verify injection
-            after_processes = {(p.pid, p.name()) for p in psutil.process_iter(['pid', 'name'])}
-            dll_injector_count = sum(1 for _, name in after_processes if "DLL Injector" in name)
+            # Check injection status using log files
+            injection_status = self.check_injection_status()
             
-            if dll_injector_count > 1:  # More than just the main GUI process
-                logger.info(f"Found {dll_injector_count} DLL Injector processes - injection likely successful")
+            # Terminate the game process regardless of injection result
+            logger.info("Attempting to terminate game process...")
+            self.terminate_process(pid)
+            
+            # Return the injection status
+            if injection_status is True:
+                logger.info("DLL injection completed successfully")
                 return True
+            elif injection_status is False:
+                logger.error("DLL injection failed")
+                return False
             else:
-                logger.error("No additional DLL Injector processes detected")
+                logger.error("DLL injection status unknown (timeout)")
                 return False
 
         except Exception as e:
             logger.error(f"Error during injection process: {e}")
+            # Try to terminate the process even if injection failed
+            self.terminate_process(pid)
             return False
 
     def check_and_click_start_game2(self, max_retries=5, retry_interval=2):
@@ -371,6 +499,31 @@ class DLLInjector:
                 time.sleep(retry_interval)
         
         logger.info("No Steam launch options found after maximum retries")
+        return False
+
+    def check_and_click_yunxu(self, max_retries=5, retry_interval=1):
+        """
+        Check for and click the yunxu (allow) button if it appears for firewall permissions
+        Returns True if button was found and clicked, False otherwise
+        """
+        logger.info("Checking for firewall permission dialog...")
+        for i in range(max_retries):
+            try:
+                yunxu_location = pg.locateOnScreen(self.yunxu_path, confidence=0.75)
+                if yunxu_location:
+                    logger.info("Found firewall permission button")
+                    yunxu_center = pg.center(yunxu_location)
+                    pg.click(yunxu_center)
+                    logger.info("Clicked firewall permission button")
+                    time.sleep(1)
+                    return True
+                logger.info(f"Firewall permission dialog not found, retrying ({i+1}/{max_retries})...")
+                time.sleep(retry_interval)
+            except Exception as e:
+                logger.error(f"Error checking for firewall permission: {str(e)}")
+                time.sleep(retry_interval)
+        
+        logger.info("No firewall permission dialog found after maximum retries")
         return False
 
     def run_injection_process(self):
@@ -401,9 +554,13 @@ class DLLInjector:
         logger.info("Checking for Steam launch options...")
         self.check_and_click_start_game2()
         
+        # Step 3.75: Check for and handle firewall permission dialog
+        logger.info("Checking for firewall permission dialog...")
+        self.check_and_click_yunxu()
+        
         # Step 4: Wait for the game process to start
         logger.info(f"Waiting for game to launch...")
-        time.sleep(10)  # Wait time for game launch
+        time.sleep(5)  # Wait time for game launch
         
         # Step 5: Get processes after waiting
         logger.info("Recording processes after game launch...")
