@@ -9,6 +9,7 @@ import re
 import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.drawing.image import Image
+from license_agreement_handler import LicenseAgreementHandler
 
 logger = logging.getLogger()
 
@@ -19,6 +20,8 @@ class SteamOKController:
         self.current_game_index = 0  # 当前处理的游戏索引
         self.error_messages = {}  # 存储游戏安装失败的错误信息
         self.excel_path = excel_path  # Excel文件路径
+        self.confirm_quit_path = os.path.join(os.path.dirname(__file__), "png/confirm_quit.png")
+        self.license_handler = LicenseAgreementHandler()  # 创建许可协议处理器实例
 
     def _format_game_name(self, game_name):
         """格式化游戏名称，只保留中文和英文字母字符"""
@@ -369,7 +372,7 @@ class SteamOKController:
             return False
 
         except Exception as e:
-            logger.error(f"Error activating Steam window")
+            logger.error(f"Error activating Steam window: {e}")
             return False
 
     def move_steamok_to_background(self):
@@ -441,18 +444,67 @@ class SteamOKController:
                 logger.error(f"检测出错: {str(e)}，10秒后重试", exc_info=True)
                 time.sleep(10)
 
+    def check_stop_game_button(self):
+        """检查并点击停止游戏按钮"""
+        try:
+            stop_button_image = os.path.join(os.path.dirname(__file__), "png/stop_game.png")
+            stop_button_location = pg.locateOnScreen(stop_button_image, confidence=0.9)
+
+            if stop_button_location:
+                stop_button_center = (
+                    stop_button_location[0] + stop_button_location[2] / 2,
+                    stop_button_location[1] + stop_button_location[3] / 2
+                )
+                pg.click(stop_button_center)
+                time.sleep(1)
+                logger.info("Clicked '停止游戏' button")
+                return True
+            else:
+                logger.error("'停止游戏' button not found")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error checking stop game button: {e}")
+            return False
+
+    def check_confirm_quit_button(self):
+        """检查并点击确认退出按钮"""
+        try:
+            confirm_quit_location = pg.locateOnScreen(self.confirm_quit_path, confidence=0.9)
+
+            if confirm_quit_location:
+                confirm_quit_center = (
+                    confirm_quit_location[0] + confirm_quit_location[2] / 2,
+                    confirm_quit_location[1] + confirm_quit_location[3] / 2
+                )
+                pg.click(confirm_quit_center)
+                time.sleep(1)
+                logger.info("Clicked '确认退出' button")
+                return True
+            else:
+                logger.error("'确认退出' button not found")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error checking confirm quit button: {e}")
+            return False
+
     def process_game(self, game_name):
         """处理单个游戏的完整流程"""
         try:
             logger.info(f"Processing game: {game_name}")
+            
+            # 启动许可协议监控线程
+            self.license_handler.start()
 
-            # 将SteamOK窗口移到最前面
+            # 将SteamOK窗口移到最前面（用于搜索和点击马上玩）
             if not self.activate_steamok_window():
                 error_msg = "Failed to activate SteamOK window"
                 logger.error(f"{error_msg} for game: {game_name}")
                 self.results[game_name] = False
                 self.error_messages[game_name] = error_msg
                 self._save_game_result(game_name, False, error_msg)
+                self.license_handler.stop()  # 停止许可协议监控
                 return False
 
             # 搜索游戏
@@ -462,6 +514,7 @@ class SteamOKController:
                 self.results[game_name] = False
                 self.error_messages[game_name] = error_msg
                 self._save_game_result(game_name, False, error_msg)
+                self.license_handler.stop()  # 停止许可协议监控
                 return False
 
             # 点击第一个结果
@@ -471,6 +524,7 @@ class SteamOKController:
                 self.results[game_name] = False
                 self.error_messages[game_name] = error_msg
                 self._save_game_result(game_name, False, error_msg)
+                self.license_handler.stop()  # 停止许可协议监控
                 return False
 
             # 检查并点击"马上玩"按钮
@@ -480,6 +534,7 @@ class SteamOKController:
                 self.results[game_name] = False
                 self.error_messages[game_name] = error_msg
                 self._save_game_result(game_name, False, error_msg)
+                self.license_handler.stop()  # 停止许可协议监控
                 return False
 
             # 检查并点击确认按钮
@@ -489,68 +544,71 @@ class SteamOKController:
                 self.results[game_name] = False
                 self.error_messages[game_name] = error_msg
                 self._save_game_result(game_name, False, error_msg)
+                self.license_handler.stop()  # 停止许可协议监控
                 return False
 
-            # 最多尝试10次点击安装按钮
-            install_success = False
-            for attempt in range(10):
-                logger.info(f"第{attempt + 1}次尝试点击安装按钮，等待50秒...")
+            # 等待游戏启动
+            time.sleep(20)
 
-                # 最小化SteamOK窗口
+            # 尝试点击停止游戏按钮或安装按钮（最多10次）
+            success = False
+            for attempt in range(10):
+                logger.info(f"第{attempt + 1}次尝试...")
+                
+                # 确保Steam窗口在前
+                if not self.activate_steam_window():
+                    logger.warning("激活Steam窗口失败，继续尝试...")
+                    time.sleep(5)
+                    continue
+                
+                # 尝试停止游戏流程
+                if self.check_stop_game_button():
+                    logger.info("成功检测并点击停止游戏按钮")
+                    time.sleep(15)  # 等待确认对话框出现
+                    if self.check_confirm_quit_button():
+                        logger.info("成功检测并点击确认退出按钮")
+                        time.sleep(10)  # 等待退出游戏
+                        success = True
+                        break
+                    else:
+                        logger.warning("未找到确认退出按钮，继续尝试...")
+                
+                # 尝试安装流程
                 if not self.move_steamok_to_background():
                     logger.warning("最小化SteamOK窗口失败...")
-                    continue
-
-                # 尝试点击安装按钮
-                if self.click_install_button():
+                elif self.click_install_button():
                     logger.info("成功检测并点击安装按钮")
-                    install_success = True
-                    break
-                time.sleep(10)
-
+                    # 检查安装是否完成
+                    if self.check_installation_complete():
+                        logger.info("游戏安装完成")
+                        success = True
+                        break
+                    else:
+                        logger.warning("游戏安装未完成，继续尝试...")
+                
+                time.sleep(5)
 
             # 10次尝试后仍未成功
-            if not install_success:
-                error_msg = "超时错误：10次尝试后仍未能成功点击安装按钮"
+            if not success:
+                error_msg = "超时错误：10次尝试后仍未能成功停止游戏或安装"
                 logger.error(error_msg)
                 self.error_messages[game_name] = error_msg
                 self._save_game_result(game_name, False, error_msg)
+                self.license_handler.stop()  # 确保在异常情况下也停止监控
                 return False
 
-            # 等待安装完成
-            if not self.check_installation_complete():
-                error_msg = "Installation process failed or timed out"
-                logger.error(f"{error_msg} for game: {game_name}")
-                self.results[game_name] = False
-                self.error_messages[game_name] = error_msg
-                self._save_game_result(game_name, False, error_msg)
-                return False
-
-            # time.sleep(5)
-            # logger.info("游戏安装完成，开始进行打包")
-
-            # 游戏安装完成后，立即进行打包
-            # from game_packer import GamePacker
-            # packer = GamePacker()
-            # if not packer.process_latest_game(game_name):
-            #     error_msg = "Game packing failed after installation"
-            #     logger.error(f"{error_msg} for game: {game_name}")
-            #     self.results[game_name] = False
-            #     self.error_messages[game_name] = error_msg
-            #     self._save_game_result(game_name, False, error_msg)
-            #     return False
-
+            # 保存成功结果
             self.results[game_name] = True
-            logger.info(f"Successfully processed game: {game_name}")
             self._save_game_result(game_name, True)
+            self.license_handler.stop()  # 确保在函数结束时停止监控
             return True
 
         except Exception as e:
-            error_msg = f"Error processing game: {str(e)}"
-            logger.error(error_msg)
+            logger.error(f"Error processing game {game_name}: {e}")
             self.results[game_name] = False
-            self.error_messages[game_name] = error_msg
-            self._save_game_result(game_name, False, error_msg)
+            self.error_messages[game_name] = str(e)
+            self._save_game_result(game_name, False, str(e))
+            self.license_handler.stop()  # 确保在异常情况下也停止监控
             return False
 
     def _save_game_result(self, game_name, available, error_msg=None):

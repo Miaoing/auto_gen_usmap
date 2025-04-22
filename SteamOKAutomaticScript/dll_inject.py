@@ -21,6 +21,7 @@ class DLLInjector:
         ]
         self.start_game2_path = os.path.join(os.path.dirname(__file__), "png/start_game2.png")
         self.yunxu_path = os.path.join(os.path.dirname(__file__), "png/yunxu.png")
+        self.still_play_game_path = os.path.join(os.path.dirname(__file__), "png/still_play_game.png")
         
     def activate_steam_window(self):
         """Activate Steam window and bring it to the front"""
@@ -63,12 +64,10 @@ class DLLInjector:
                         playable_location = pg.locateOnScreen(image_path, confidence=confidence)
                     except Exception as e:
                         logger.error(f"Error locating image: {str(e)}")
-                        continue
-                    logger.info(playable_location)                    
+
                     if playable_location:
                         logger.info("Found playable button!")
                         playable_center = pg.center(playable_location)
-                        print(playable_center)
                         pg.click(playable_center)
                         logger.info("Clicked playable button")
                         return True
@@ -526,6 +525,31 @@ class DLLInjector:
         logger.info("No firewall permission dialog found after maximum retries")
         return False
 
+    def check_and_click_still_play_game(self, max_retries=5, retry_interval=1):
+        """
+        Check for and click the still_play_game.png button if it appears
+        Returns True if button was found and clicked, False otherwise
+        """
+        logger.info("Checking for cloud save dialog...")
+        for i in range(max_retries):
+            try:
+                still_play_location = pg.locateOnScreen(self.still_play_game_path, confidence=0.75)
+                if still_play_location:
+                    logger.info("Found cloud save dialog")
+                    still_play_center = pg.center(still_play_location)
+                    pg.click(still_play_center)
+                    logger.info("Clicked 'still play game' button")
+                    time.sleep(1)
+                    return True
+                logger.info(f"Cloud save dialog not found, retrying ({i+1}/{max_retries})...")
+                time.sleep(retry_interval)
+            except Exception as e:
+                logger.error(f"Error checking for cloud save dialog: {str(e)}")
+                time.sleep(retry_interval)
+        
+        logger.info("No cloud save dialog found after maximum retries")
+        return False
+
     def run_injection_process(self):
         """
         Full process: activate Steam window, detect playable button, click it, get game process, and inject DLL
@@ -553,6 +577,10 @@ class DLLInjector:
         # Step 3.5: Check for and handle Steam launch options
         logger.info("Checking for Steam launch options...")
         self.check_and_click_start_game2()
+        
+        # Step 3.6: Check for and handle cloud save dialog
+        logger.info("Checking for cloud save dialog...")
+        self.check_and_click_still_play_game()
         
         # Step 3.75: Check for and handle firewall permission dialog
         logger.info("Checking for firewall permission dialog...")
