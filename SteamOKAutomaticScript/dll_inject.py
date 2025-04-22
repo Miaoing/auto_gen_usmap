@@ -457,6 +457,14 @@ class DLLInjector:
             logger.info("Attempting to terminate game process...")
             self.terminate_process(pid)
             
+            # Close the DLL Injector window
+            try:
+                logger.info("Closing DLL Injector window...")
+                window.close()
+                time.sleep(1)  # Wait for window to close
+            except Exception as e:
+                logger.error(f"Error closing DLL Injector window: {e}")
+            
             # Return the injection status
             if injection_status is True:
                 logger.info("DLL injection completed successfully")
@@ -472,6 +480,14 @@ class DLLInjector:
             logger.error(f"Error during injection process: {e}")
             # Try to terminate the process even if injection failed
             self.terminate_process(pid)
+            # Try to close the DLL Injector window even if injection failed
+            try:
+                if 'window' in locals():
+                    logger.info("Closing DLL Injector window after error...")
+                    window.close()
+                    time.sleep(1)
+            except Exception as close_error:
+                logger.error(f"Error closing DLL Injector window after error: {close_error}")
             return False
 
     def check_and_click_start_game2(self, max_retries=5, retry_interval=2):
