@@ -9,6 +9,7 @@ import re
 import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.drawing.image import Image
+from license_agreement_handler import LicenseAgreementHandler
 
 logger = logging.getLogger()
 
@@ -20,6 +21,7 @@ class SteamOKController:
         self.error_messages = {}  # 存储游戏安装失败的错误信息
         self.excel_path = excel_path  # Excel文件路径
         self.confirm_quit_path = os.path.join(os.path.dirname(__file__), "png/confirm_quit.png")
+        self.license_handler = LicenseAgreementHandler()  # 创建许可协议处理器实例
 
     def _format_game_name(self, game_name):
         """格式化游戏名称，只保留中文和英文字母字符"""
@@ -491,6 +493,9 @@ class SteamOKController:
         try:
             logger.info(f"Processing game: {game_name}")
             
+            # 启动许可协议监控线程
+            self.license_handler.start()
+
             # 将SteamOK窗口移到最前面（用于搜索和点击马上玩）
             if not self.activate_steamok_window():
                 error_msg = "Failed to activate SteamOK window"
@@ -498,6 +503,7 @@ class SteamOKController:
                 self.results[game_name] = False
                 self.error_messages[game_name] = error_msg
                 self._save_game_result(game_name, False, error_msg)
+                self.license_handler.stop()  # 停止许可协议监控
                 return False
 
             # 搜索游戏
@@ -507,6 +513,7 @@ class SteamOKController:
                 self.results[game_name] = False
                 self.error_messages[game_name] = error_msg
                 self._save_game_result(game_name, False, error_msg)
+                self.license_handler.stop()  # 停止许可协议监控
                 return False
 
             # 点击第一个结果
@@ -516,6 +523,7 @@ class SteamOKController:
                 self.results[game_name] = False
                 self.error_messages[game_name] = error_msg
                 self._save_game_result(game_name, False, error_msg)
+                self.license_handler.stop()  # 停止许可协议监控
                 return False
 
             # 检查并点击"马上玩"按钮
@@ -525,6 +533,7 @@ class SteamOKController:
                 self.results[game_name] = False
                 self.error_messages[game_name] = error_msg
                 self._save_game_result(game_name, False, error_msg)
+                self.license_handler.stop()  # 停止许可协议监控
                 return False
 
             # 检查并点击确认按钮
@@ -534,8 +543,16 @@ class SteamOKController:
                 self.results[game_name] = False
                 self.error_messages[game_name] = error_msg
                 self._save_game_result(game_name, False, error_msg)
+                self.license_handler.stop()  # 停止许可协议监控
                 return False
 
+            for attempt in range(10):
+                if not self.move_steamok_to_background():
+                    logger.warning("最小化SteamOK窗口失败...")
+                    time.sleep(5)
+                    continue
+                else:
+                    break
             # 等待游戏启动
             time.sleep(20)
 
@@ -583,11 +600,13 @@ class SteamOKController:
                 logger.error(error_msg)
                 self.error_messages[game_name] = error_msg
                 self._save_game_result(game_name, False, error_msg)
+                self.license_handler.stop()  # 确保在异常情况下也停止监控
                 return False
 
             # 保存成功结果
             self.results[game_name] = True
             self._save_game_result(game_name, True)
+            self.license_handler.stop()  # 确保在函数结束时停止监控
             return True
 
         except Exception as e:
@@ -595,6 +614,7 @@ class SteamOKController:
             self.results[game_name] = False
             self.error_messages[game_name] = str(e)
             self._save_game_result(game_name, False, str(e))
+            self.license_handler.stop()  # 确保在异常情况下也停止监控
             return False
 
     def _save_game_result(self, game_name, available, error_msg=None):

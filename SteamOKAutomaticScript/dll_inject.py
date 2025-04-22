@@ -62,16 +62,15 @@ class DLLInjector:
                     print("playable_location", image_path, confidence)
                     try:
                         playable_location = pg.locateOnScreen(image_path, confidence=confidence)
+                        if playable_location:
+                            logger.info("Found playable button!")
+                            playable_center = pg.center(playable_location)
+                            pg.click(playable_center)
+                            logger.info("Clicked playable button")
+                            return True
                     except Exception as e:
                         logger.error(f"Error locating image: {str(e)}")
 
-                    if playable_location:
-                        logger.info("Found playable button!")
-                        playable_center = pg.center(playable_location)
-                        pg.click(playable_center)
-                        logger.info("Clicked playable button")
-                        return True
-                    
                     logger.info(f"Playable button not found, retrying ({i+1}/{max_retries})...")
                     time.sleep(retry_interval)
                 
