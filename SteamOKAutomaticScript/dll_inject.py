@@ -303,18 +303,38 @@ class DLLInjector:
             logger.error(f"Error finding latest log directory: {e}")
             return None
 
-    def check_injection_status(self, max_wait_time=10*60, check_interval=2):
+    def check_injection_status(self, pid, max_wait_time=10*60, check_interval=2):
         """
         Check the injection status by monitoring log files
         Returns: 
             - True if injection succeeded
             - False if injection failed
-            - None if still running after max_wait_time
+            - "timeout" if injection took too long
+            - "crashed" if game process ended unexpectedly
         """
         start_time = time.time()
         base_log_path = "C:\\Dumper-7\\log"
         
         while time.time() - start_time < max_wait_time:
+            # Check if process is still running
+            try:
+                if not psutil.pid_exists(pid):
+                    logger.error("Game process crashed or ended unexpectedly")
+                    # Get the latest log directory to write crash signal
+                    log_dir = self.get_latest_log_directory(base_log_path)
+                    if log_dir:
+                        crash_signal_path = os.path.join(log_dir, "crash.signal")
+                        try:
+                            with open(crash_signal_path, 'w') as f:
+                                f.write(f"Process {pid} crashed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                            logger.info(f"Created crash signal file at {crash_signal_path}")
+                        except Exception as e:
+                            logger.error(f"Failed to create crash signal file: {e}")
+                    return "crashed"
+            except Exception as e:
+                logger.error(f"Error checking process status: {e}")
+                return False
+
             # Get the latest log directory
             log_dir = self.get_latest_log_directory(base_log_path)
             if not log_dir:
@@ -352,8 +372,9 @@ class DLLInjector:
 
             time.sleep(check_interval)
 
-        logger.error(f"Injection status check timed out after {max_wait_time} seconds")
-        return None
+        # If we get here, we've timed out
+        logger.error(f"Injection timed out after {max_wait_time} seconds")
+        return "timeout"
 
     def terminate_process(self, pid):
         """
@@ -451,7 +472,7 @@ class DLLInjector:
             time.sleep(2)
 
             # Check injection status using log files
-            injection_status = self.check_injection_status()
+            injection_status = self.check_injection_status(pid=pid)
             
             # Terminate the game process regardless of injection result
             logger.info("Attempting to terminate game process...")
@@ -472,8 +493,14 @@ class DLLInjector:
             elif injection_status is False:
                 logger.error("DLL injection failed")
                 return False
+            elif injection_status == "timeout":
+                logger.error("DLL injection timed out after 10 minutes")
+                return False
+            elif injection_status == "crashed":
+                logger.error("DLL injection failed: game process crashed")
+                return False
             else:
-                logger.error("DLL injection status unknown (timeout)")
+                logger.error("DLL injection status unknown")
                 return False
 
         except Exception as e:
