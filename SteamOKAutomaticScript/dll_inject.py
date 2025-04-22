@@ -413,7 +413,7 @@ class DLLInjector:
                 # Launch DLL Injector if not found
                 logger.info("DLL Injector not found, launching...")
                 os.startfile(self.dll_injector_path)
-                time.sleep(3)  # Wait for application to launch
+                time.sleep(5)  # Wait for application to launch
                 
                 # Check again for the window
                 windows = gw.getWindowsWithTitle("DLL Injector")
@@ -423,10 +423,11 @@ class DLLInjector:
             else:
                 logger.info("Found existing DLL Injector window, activating...")
 
+            print('before activate dll injector')
             window = windows[0]
             window.activate()
             time.sleep(1)
-
+            print('after activate dll injector')
             # Get process name from PID
             try:
                 process = psutil.Process(pid)
@@ -630,8 +631,10 @@ class DLLInjector:
         
         # Step 4: Wait for the game process to start
         logger.info(f"Waiting for game to launch...")
-        time.sleep(5)  # Wait time for game launch
-        
+        # Print countdown while waiting
+        for i in range(60, 0, -1):
+            logger.info(f"Waiting for game launch... {i} seconds remaining")
+            time.sleep(1)
         # Step 5: Get processes after waiting
         logger.info("Recording processes after game launch...")
         after_processes = self.get_running_processes()

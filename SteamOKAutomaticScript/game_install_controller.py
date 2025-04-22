@@ -7,6 +7,7 @@ import pygetwindow as gw
 import pyperclip
 import re
 import pandas as pd
+import win32gui
 from openpyxl import load_workbook
 from openpyxl.drawing.image import Image
 from license_agreement_handler import LicenseAgreementHandler
@@ -278,38 +279,45 @@ class SteamOKController:
             logger.info("尝试寻找安装按钮和reinstall按钮...")
             install_button_location = None
             reinstall_button_location = None
-            
+
             try:
                 install_button_location = pg.locateOnScreen(install_button_image, confidence=0.9)
             except Exception as e:
                 logger.warning("未找到安装按钮，将在后续重试")
-                
-            try:
-                reinstall_button_location = pg.locateOnScreen(reinstall_button_image, confidence=0.9)
-            except Exception as e:
-                logger.debug("未找到reinstall按钮")
             
-            time.sleep(2)
-            
-            # 如果找到reinstall按钮，优先点击它
-            if reinstall_button_location:
-                logger.info("找到reinstall按钮，优先点击")
-                reinstall_button_center = (
-                    reinstall_button_location[0] + reinstall_button_location[2] / 2,
-                    reinstall_button_location[1] + reinstall_button_location[3] / 2
-                )
-                pg.click(reinstall_button_center)
-                time.sleep(3)
-                logger.info("已点击reinstall按钮")
-                
-                # 重新检查安装按钮
+            if install_button_location is None:
                 try:
-                    install_button_location = pg.locateOnScreen(install_button_image, confidence=0.8)
+                    reinstall_button_location = pg.locateOnScreen(reinstall_button_image, confidence=0.9)
                 except Exception as e:
-                    logger.warning("重新检查时未找到安装按钮")
+                    logger.debug("未找到reinstall按钮")
                 
-                return True
-            
+                time.sleep(2)
+                
+                # 如果找到reinstall按钮，优先点击它
+                if reinstall_button_location:
+                    logger.info("找到reinstall按钮，优先点击")
+                    
+                    reinstall_button_center = (
+                        reinstall_button_location[0] + reinstall_button_location[2] / 2,
+                        reinstall_button_location[1] + reinstall_button_location[3] / 2
+                    )
+                    pg.click(reinstall_button_center)
+                    time.sleep(10)
+                    logger.info("已点击reinstall按钮")
+                    
+                    # 重新检查安装按钮
+                    try:
+                        install_button_location = pg.locateOnScreen(install_button_image, confidence=0.8)
+                    except Exception as e:
+                        logger.warning("重新检查时未找到安装按钮")
+                    
+                    if install_button_location:
+                        logger.info("重新检查时找到安装按钮")
+                    else:
+                        logger.warning("Reinstall 检查时未找到安装按钮, 继续下载")
+                        return True
+                
+
             # 如果找到安装按钮，点击它
             if install_button_location:
                 logger.info("找到安装按钮")
@@ -354,21 +362,22 @@ class SteamOKController:
     def activate_steam_window(self):
         """激活Steam窗口并确保它处于最前面"""
         try:
-            # 获取所有窗口标题
-            windows = gw.getWindowsWithTitle("Steam")
-            if not windows:
-                logger.error("Steam window not found")
-                return False
-
-            for window in windows:
-                if window.title == "Steam":
-                    window.restore()  # 恢复窗口，如果它最小化了
-                    window.activate()  # 激活并确保窗口处于最前面
-                    logger.info("Steam window activated and brought to front")
-                    return True
-
-            logger.error("No window with exact 'Steam' title found")
-            return False
+            # 按下Win键
+            pg.hotkey('win')
+            time.sleep(0.5)  # 等待开始菜单打开
+            
+            # 输入"Steam"
+            pg.write('Steam')
+            time.sleep(1)  # 等待搜索结果
+            
+            # 按两次回车键
+            pg.press('enter')
+            time.sleep(0.5)
+            pg.press('enter')
+            time.sleep(1)  # 等待Steam启动
+            
+            logger.info("Steam window activated using Win+Type method")
+            return True
 
         except Exception as e:
             logger.error(f"Error activating Steam window: {e}")
@@ -389,6 +398,28 @@ class SteamOKController:
                     return True
         except Exception as e:
             logger.error(f"Error minimizing SteamOK window")
+            return False
+
+    def move_game_to_background(self):
+        """将游戏窗口移到后台"""
+        try:
+            # 获取所有窗口标题
+            windows = gw.getAllWindows()
+            if not windows:
+                logger.error("No windows found")
+                return False
+
+            for window in windows:
+                # 排除Steam和SteamOK窗口
+                if window.title != "Steam" and window.title != "SteamOK" and window.title:
+                    window.minimize()  # 将游戏窗口最小化，移到后台
+                    logger.info(f"Game window '{window.title}' minimized and moved to background")
+                    return True
+
+            logger.error("No game window found")
+            return False
+        except Exception as e:
+            logger.error(f"Error minimizing game window: {e}")
             return False
 
     def check_installation_complete(self):
@@ -436,8 +467,8 @@ class SteamOKController:
                 except Exception as e:
                     logger.debug(f"图像识别失败: {str(e)}", exc_info=True)
 
-                logger.info("⏳ 安装尚未完成，5秒后重试...")
-                time.sleep(5)
+                logger.info("⏳ 安装尚未完成，50秒后重试...")
+                time.sleep(50)
 
             except Exception as e:
                 logger.error(f"检测出错: {str(e)}，10秒后重试", exc_info=True)
@@ -546,22 +577,28 @@ class SteamOKController:
                 self.license_handler.stop()  # 停止许可协议监控
                 return False
 
-            for attempt in range(10):
-                if not self.move_steamok_to_background():
-                    logger.warning("最小化SteamOK窗口失败...")
-                    time.sleep(5)
-                    continue
-                else:
-                    break
+
+            time.sleep(40)
+            
             # 等待游戏启动
-            time.sleep(20)
+            while not self.move_steamok_to_background() and not self.activate_steam_window():
+                logger.warning("激活Steam窗口失败，继续尝试...")
+                time.sleep(5)
+                continue
 
             # 尝试点击停止游戏按钮或安装按钮（最多10次）
             success = False
             for attempt in range(10):
+
                 logger.info(f"第{attempt + 1}次尝试...")
                 
-                # 确保Steam窗口在前
+                # 确保Steam窗口在前，其他窗口在后台
+                if not self.move_steamok_to_background():
+                    logger.warning("最小化SteamOK窗口失败...")
+                    
+                # if not self.move_game_to_background():
+                    # logger.warning("最小化游戏窗口失败...")
+                    
                 if not self.activate_steam_window():
                     logger.warning("激活Steam窗口失败，继续尝试...")
                     time.sleep(5)
@@ -570,7 +607,7 @@ class SteamOKController:
                 # 尝试停止游戏流程
                 if self.check_stop_game_button():
                     logger.info("成功检测并点击停止游戏按钮")
-                    time.sleep(15)  # 等待确认对话框出现
+                    time.sleep(5)  # 等待确认对话框出现
                     if self.check_confirm_quit_button():
                         logger.info("成功检测并点击确认退出按钮")
                         time.sleep(10)  # 等待退出游戏
@@ -578,7 +615,7 @@ class SteamOKController:
                         break
                     else:
                         logger.warning("未找到确认退出按钮，继续尝试...")
-                
+
                 # 尝试安装流程
                 if not self.move_steamok_to_background():
                     logger.warning("最小化SteamOK窗口失败...")

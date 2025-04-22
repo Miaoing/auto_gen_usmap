@@ -33,7 +33,7 @@ class LicenseAgreementHandler:
                         time.sleep(1)  # 点击后等待1秒
                         return True  # 如果找到一个并点击成功，就返回
                 except Exception as e:
-                    logger.debug(f"检查许可协议按钮 {os.path.basename(accept_image)} 时出错: {str(e)}")
+                    # logger.debug(f"检查许可协议按钮 {os.path.basename(accept_image)} 时出错: {str(e)}")
                     continue  # 继续检查下一个按钮
             return False
         except Exception as e:
