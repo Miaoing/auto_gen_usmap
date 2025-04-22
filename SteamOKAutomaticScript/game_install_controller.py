@@ -33,6 +33,9 @@ class SteamOKController:
     def activate_steamok_window(self):
         """激活SteamOK窗口并确保它处于最前面"""
         try:
+            # Press Win + D to show desktop first
+            pg.hotkey('win', 'd')
+            time.sleep(0.5)  # Wait for desktop to show
             # 获取所有窗口标题
             windows = gw.getWindowsWithTitle("SteamOK")
             if not windows:

@@ -9,6 +9,9 @@ from datetime import datetime
 from logger import setup_logging
 import glob
 
+# Disable PyAutoGUI fail-safe (not recommended for safety reasons)
+pg.FAILSAFE = False
+
 logger = setup_logging()
 
 class DLLInjector:
@@ -23,6 +26,21 @@ class DLLInjector:
         self.yunxu_path = os.path.join(os.path.dirname(__file__), "png/yunxu.png")
         self.still_play_game_path = os.path.join(os.path.dirname(__file__), "png/still_play_game.png")
         
+        # Sleep configuration dictionary
+        self.sleep_config = {
+            'window_activate': 0.3,  # Time to wait after window activation
+            'click_delay': 0.5,      # Time to wait after clicking
+            'dll_injector_start': 5, # Time to wait for DLL Injector to start
+            'process_check': 2,      # Time between process checks
+            'game_launch': 30,       # Time to wait for game to launch
+            'minimize_wait': 1,      # Time to wait after minimizing windows
+            'retry_interval': 2,     # Time between retries for various operations
+            'keyboard_delay': 0.1,   # Time between keyboard actions
+            'injection_check': 2,    # Time between injection status checks
+            'window_close': 1,       # Time to wait after closing windows
+            'injection_max_wait': 240, # Maximum time to wait for injection (4 minutes)
+        }
+        
     def activate_steam_window(self):
         """Activate Steam window and bring it to the front"""
         try:
@@ -35,9 +53,9 @@ class DLLInjector:
             for window in windows:
                 if window.title == "Steam":
                     window.restore()  # Restore window if minimized
-                    time.sleep(0.3)
+                    time.sleep(self.sleep_config['window_activate'])
                     window.activate()  # Activate and bring window to front
-                    time.sleep(0.3)
+                    time.sleep(self.sleep_config['window_activate'])
                     
                     # Click on the window to ensure it's active
                     pg.click((window.left + window.right)//2, window.top + 10)
@@ -262,15 +280,18 @@ class DLLInjector:
 
             # Click at the calculated position
             pg.click(x, y)
-            time.sleep(0.5)  # Small delay after click
+            time.sleep(self.sleep_config['click_delay'])  # Small delay after click
             return True
         except Exception as e:
             logger.error(f"Error in click_relative: {e}")
             return False
 
-    def get_latest_log_directory(self, base_path="C:\\Dumper-7\\log"):
+    def get_latest_log_directory(self, base_path="C:\\Dumper-7\\log", injection_start_time=None):
         """
         Get the most recent log directory created after injection start time
+        Args:
+            base_path: Path to the log directory
+            injection_start_time: Optional datetime object representing when injection started
         """
         try:
             # Get all timestamp directories
@@ -286,7 +307,10 @@ class DLLInjector:
                     # Try to parse the directory name as a timestamp
                     dir_name = os.path.basename(dir_path)
                     dir_time = datetime.strptime(dir_name, "%Y%m%d_%H%M%S")
-                    valid_dirs.append((dir_time, dir_path))
+                    
+                    # Only include directories created after injection start time if specified
+                    if injection_start_time is None or dir_time > injection_start_time:
+                        valid_dirs.append((dir_time, dir_path))
                 except ValueError:
                     continue
 
@@ -303,7 +327,7 @@ class DLLInjector:
             logger.error(f"Error finding latest log directory: {e}")
             return None
 
-    def check_injection_status(self, pid, max_wait_time=10*60, check_interval=2):
+    def check_injection_status(self, pid, check_interval=10, injection_start_time=None):
         """
         Check the injection status by monitoring log files
         Returns: 
@@ -314,6 +338,7 @@ class DLLInjector:
         """
         start_time = time.time()
         base_log_path = "C:\\Dumper-7\\log"
+        max_wait_time = self.sleep_config['injection_max_wait']
         
         while time.time() - start_time < max_wait_time:
             # Check if process is still running
@@ -321,7 +346,7 @@ class DLLInjector:
                 if not psutil.pid_exists(pid):
                     logger.error("Game process crashed or ended unexpectedly")
                     # Get the latest log directory to write crash signal
-                    log_dir = self.get_latest_log_directory(base_log_path)
+                    log_dir = self.get_latest_log_directory(base_log_path, injection_start_time)
                     if log_dir:
                         crash_signal_path = os.path.join(log_dir, "crash.signal")
                         try:
@@ -336,7 +361,7 @@ class DLLInjector:
                 return False
 
             # Get the latest log directory
-            log_dir = self.get_latest_log_directory(base_log_path)
+            log_dir = self.get_latest_log_directory(base_log_path, injection_start_time)
             if not log_dir:
                 time.sleep(check_interval)
                 continue
@@ -406,6 +431,7 @@ class DLLInjector:
         """
         Inject DLL by directly interacting with DLL Injector GUI
         """
+        injection_start_time = datetime.now()
         try:
             # First check if DLL Injector is already open
             windows = gw.getWindowsWithTitle("DLL Injector")
@@ -413,7 +439,7 @@ class DLLInjector:
                 # Launch DLL Injector if not found
                 logger.info("DLL Injector not found, launching...")
                 os.startfile(self.dll_injector_path)
-                time.sleep(5)  # Wait for application to launch
+                time.sleep(self.sleep_config['dll_injector_start'])  # Wait for application to launch
                 
                 # Check again for the window
                 windows = gw.getWindowsWithTitle("DLL Injector")
@@ -438,42 +464,42 @@ class DLLInjector:
                 return False
 
             # Input file name
-            self.click_relative(window, 100, 115)
-            time.sleep(1)
+            self.click_relative(windows[0], 100, 115)
+            time.sleep(self.sleep_config['window_activate'])
             
             # Select all text using explicit key presses
             pg.keyDown('ctrl')
-            time.sleep(0.1)
+            time.sleep(self.sleep_config['keyboard_delay'])
             pg.press('a')
-            time.sleep(0.1)
+            time.sleep(self.sleep_config['keyboard_delay'])
             pg.keyUp('ctrl')
-            time.sleep(1)
+            time.sleep(self.sleep_config['window_activate'])
 
             # Clear selection
             pg.press('backspace')
-            time.sleep(0.5)
+            time.sleep(self.sleep_config['click_delay'])
 
             # Type the PID
             pg.write(str(pid))
-            time.sleep(2)
+            time.sleep(self.sleep_config['window_activate'])
 
             # Select exe
             logger.info("Selecting exe...")
-            self.click_relative(window, 100, 135)
-            time.sleep(2)
+            self.click_relative(windows[0], 100, 135)
+            time.sleep(self.sleep_config['window_activate'])
 
             # Select dll
             logger.info("Selecting DLL...")
-            self.click_relative(window, 200, 135)
-            time.sleep(2)
+            self.click_relative(windows[0], 200, 135)
+            time.sleep(self.sleep_config['window_activate'])
 
             # Final click (possibly menu or inject button)
             logger.info("Initiating injection...")
-            self.click_relative(window, 250, 15)
-            time.sleep(2)
+            self.click_relative(windows[0], 250, 15)
+            time.sleep(self.sleep_config['window_activate'])
 
             # Check injection status using log files
-            injection_status = self.check_injection_status(pid=pid)
+            injection_status = self.check_injection_status(pid=pid, injection_start_time=injection_start_time)
             
             # Terminate the game process regardless of injection result
             logger.info("Attempting to terminate game process...")
@@ -482,8 +508,8 @@ class DLLInjector:
             # Close the DLL Injector window
             try:
                 logger.info("Closing DLL Injector window...")
-                window.close()
-                time.sleep(1)  # Wait for window to close
+                windows[0].close()
+                time.sleep(self.sleep_config['window_close'])  # Wait for window to close
             except Exception as e:
                 logger.error(f"Error closing DLL Injector window: {e}")
             
@@ -510,10 +536,11 @@ class DLLInjector:
             self.terminate_process(pid)
             # Try to close the DLL Injector window even if injection failed
             try:
-                if 'window' in locals():
+                if 'windows' in locals():
                     logger.info("Closing DLL Injector window after error...")
-                    window.close()
-                    time.sleep(1)
+                    for window in windows:
+                        window.close()
+                    time.sleep(self.sleep_config['window_close'])
             except Exception as close_error:
                 logger.error(f"Error closing DLL Injector window after error: {close_error}")
             return False
@@ -632,9 +659,10 @@ class DLLInjector:
         # Step 4: Wait for the game process to start
         logger.info(f"Waiting for game to launch...")
         # Print countdown while waiting
-        for i in range(60, 0, -1):
+        for i in range(self.sleep_config['game_launch'], 0, -1):
             logger.info(f"Waiting for game launch... {i} seconds remaining")
             time.sleep(1)
+        
         # Step 5: Get processes after waiting
         logger.info("Recording processes after game launch...")
         after_processes = self.get_running_processes()
@@ -646,6 +674,10 @@ class DLLInjector:
             logger.error("Failed to detect game process")
             return False
         
+        # Minimize all windows to show desktop
+        logger.info("Minimizing all windows (Win + D)...")
+        pg.hotkey('win', 'd')
+        time.sleep(self.sleep_config['minimize_wait'])  # Brief pause after minimizing
         # Step 7: Inject DLL into the game process
         pid = game_process["pid"]
         if self.inject_dll(pid):
