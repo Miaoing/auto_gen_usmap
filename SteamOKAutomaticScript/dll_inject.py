@@ -40,11 +40,11 @@ class DLLInjector:
             'window_close': 1,       # Time to wait after closing windows
             'injection_max_wait': 240, # Maximum time to wait for injection (4 minutes)
         }
+        logger.info(f"DLLInjector initialized with game_folder: {game_folder}")
         
     def activate_steam_window(self):
         """Activate Steam window and bring it to the front"""
         try:
-            # Get all windows with 'Steam' in the title
             windows = gw.getWindowsWithTitle("Steam")
             if not windows:
                 logger.error("Steam window not found")
@@ -52,20 +52,19 @@ class DLLInjector:
 
             for window in windows:
                 if window.title == "Steam":
-                    window.restore()  # Restore window if minimized
+                    window.restore()
                     time.sleep(self.sleep_config['window_activate'])
-                    window.activate()  # Activate and bring window to front
+                    window.activate()
                     time.sleep(self.sleep_config['window_activate'])
                     
-                    # Click on the window to ensure it's active
                     pg.click((window.left + window.right)//2, window.top + 10)
-                    logger.info("Steam window activated and brought to front")
+                    logger.info("Steam window activated successfully")
                     return True
 
             logger.error("No window with exact 'Steam' title found")
             return False
         except Exception as e:
-            logger.error(f"Error activating Steam window: {str(e)}")
+            logger.error(f"Failed to activate Steam window: {str(e)}")
             return False
         
     def detect_and_click_playable(self, max_retries=10, retry_interval=2):
@@ -73,23 +72,23 @@ class DLLInjector:
         Detect the 'playable.png' image on screen and click it.
         Returns True if successful, False otherwise.
         """
-        logger.info("Looking for playable button...")
+        logger.info("Searching for playable button...")
         for i in range(max_retries):
             try:
                 for image_path, confidence in self.playable_image_paths:
-                    print("playable_location", image_path, confidence)
+                    logger.debug(f"Checking image: {image_path} with confidence: {confidence}")
                     try:
                         playable_location = pg.locateOnScreen(image_path, confidence=confidence)
                         if playable_location:
-                            logger.info("Found playable button!")
+                            logger.info("Found playable button")
                             playable_center = pg.center(playable_location)
                             pg.click(playable_center)
-                            logger.info("Clicked playable button")
+                            logger.info("Clicked playable button successfully")
                             return True
                     except Exception as e:
-                        logger.error(f"Error locating image: {str(e)}")
+                        logger.debug(f"Error locating image: {str(e)}")
 
-                    logger.info(f"Playable button not found, retrying ({i+1}/{max_retries})...")
+                    logger.info(f"Playable button not found, retry {i+1}/{max_retries}")
                     time.sleep(retry_interval)
                 
             except Exception as e:
@@ -108,33 +107,29 @@ class DLLInjector:
                     processes.add((proc.info['name'], proc.info['exe'], proc.info['pid']))
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
+        logger.debug(f"Found {len(processes)} running processes")
         return processes
     
     def get_process_details(self, pid):
         """Get detailed information about a process by PID"""
         try:
-            # Check if process exists before trying to get details
             if not psutil.pid_exists(pid):
                 logger.error(f"Process with PID {pid} does not exist")
                 return None
                 
             proc = psutil.Process(pid)
             
-            # Get basic info first to ensure the process is still accessible
             name = proc.name()
             exe_path = proc.exe()
-            
-            # Now get the rest of the details
             memory_mb = proc.memory_info().rss / (1024 * 1024)  # Convert to MB
             create_time = datetime.fromtimestamp(proc.create_time()).strftime('%H:%M:%S')
             
-            # Get parent process name safely
             try:
                 parent = psutil.Process(proc.ppid()).name() if proc.ppid() else "No parent"
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 parent = "Unknown parent"
                 
-            return {
+            details = {
                 'name': name,
                 'exe': exe_path,
                 'memory_mb': round(memory_mb, 2),
@@ -143,12 +138,14 @@ class DLLInjector:
                 'num_threads': proc.num_threads(),
                 'parent_process': parent
             }
+            logger.debug(f"Process details for PID {pid}: {details}")
+            return details
+            
         except psutil.NoSuchProcess:
             logger.error(f"Process PID not found (pid={pid})")
             return None
         except psutil.AccessDenied:
             logger.error(f"Access denied when accessing process (pid={pid})")
-            # Try to get minimal information
             try:
                 name = psutil.Process(pid).name()
                 return {
@@ -174,13 +171,11 @@ class DLLInjector:
         if not exe_path or not self.game_folder:
             return False
             
-        # Convert to lowercase and normalize path separator for comparison
         exe_path_norm = exe_path.lower().replace('\\', '/')
         game_folder_norm = self.game_folder.lower().replace('\\', '/')
         
-        # Check if the executable is in the game folder
         if game_folder_norm in exe_path_norm:
-            logger.info(f"Process {exe_path} is in the specified game folder {self.game_folder}")
+            logger.debug(f"Process {exe_path} is in the specified game folder {self.game_folder}")
             return True
             
         return False
@@ -189,7 +184,6 @@ class DLLInjector:
         """
         Compare before and after process sets, return the most likely game process
         """
-        # Find new processes (those in 'after' but not in 'before')
         before_pids = {pid for _, _, pid in before}
         new_processes = []
         
@@ -197,7 +191,6 @@ class DLLInjector:
             if pid not in before_pids:
                 new_processes.append((name, exe, pid))
         
-        # Filter out common system processes
         system_keywords = [
             'svchost', 'explorer', 'dllhost', 'runtimebroker', 'steamwebhelper',
             'taskmgr', 'python', 'cmd', 'conhost', 'searchapp', 'rundll32'
@@ -206,22 +199,19 @@ class DLLInjector:
         game_processes = []
         for name, exe, pid in new_processes:
             if not any(keyword in name.lower() for keyword in system_keywords) and name.lower().endswith('.exe'):
-                # Check if it's from the specified game folder
                 if self.game_folder is None or self.is_from_game_folder(exe):
                     game_processes.append((name, exe, pid))
                     logger.info(f"Found potential game process: {name} (PID: {pid}) at {exe}")
                 else:
-                    logger.info(f"Skipping process not from game folder: {name} ({exe})")
+                    logger.debug(f"Skipping process not from game folder: {name} ({exe})")
         
         if not game_processes:
             logger.error("No new game processes detected from the specified folder")
             return None
         
-        # Get detailed information for each potential game process
         process_details = []
         for name, exe, pid in game_processes:
             try:
-                # Verify process still exists before getting details
                 if psutil.pid_exists(pid):
                     details = self.get_process_details(pid)
                     if details:
@@ -234,8 +224,6 @@ class DLLInjector:
                 logger.error(f"Error processing {name} (PID: {pid}): {str(e)}")
         
         if not process_details:
-            # If we couldn't get details for any process but we have game processes, 
-            # return the first one as a fallback
             if game_processes:
                 name, exe, pid = game_processes[0]
                 logger.warning(f"Using fallback: returning game process without details: {name} (PID: {pid})")
@@ -244,15 +232,12 @@ class DLLInjector:
             logger.error("Could not get details for any new game processes")
             return None
         
-        # Sort processes by memory usage (usually the main game uses the most memory)
         process_details.sort(key=lambda x: x[3]['memory_mb'], reverse=True)
         
-        # Log all detected processes for debugging
         logger.info(f"Detected {len(process_details)} potential game processes:")
         for i, (name, exe, pid, details) in enumerate(process_details):
             logger.info(f"{i+1}. {name} (PID: {pid}) - Memory: {details['memory_mb']} MB, CPU: {details['cpu_percent']}%, Threads: {details['num_threads']}")
         
-        # Return the process with the highest memory usage as the most likely game process
         selected_process = process_details[0]
         name, exe, pid, details = selected_process
         
@@ -269,46 +254,37 @@ class DLLInjector:
     def click_relative(self, window, x_ratio, y_ratio):
         """Click at a position relative to window size"""
         try:
-            # Get window position and size
             left, top, right, bottom = window.left, window.top, window.right, window.bottom
             width = right - left
             height = bottom - top
 
-            # Calculate actual coordinates
             x = left + int(width * (x_ratio / 300))
             y = top + int(height * (y_ratio / 400))
 
-            # Click at the calculated position
             pg.click(x, y)
-            time.sleep(self.sleep_config['click_delay'])  # Small delay after click
+            time.sleep(self.sleep_config['click_delay'])
+            logger.debug(f"Clicked at relative position: ({x_ratio}, {y_ratio}) -> ({x}, {y})")
             return True
         except Exception as e:
-            logger.error(f"Error in click_relative: {e}")
+            logger.error(f"Error in click_relative: {str(e)}")
             return False
 
     def get_latest_log_directory(self, base_path="C:\\Dumper-7\\log", injection_start_time=None):
         """
         Get the most recent log directory created after injection start time
-        Args:
-            base_path: Path to the log directory
-            injection_start_time: Optional datetime object representing when injection started
         """
         try:
-            # Get all timestamp directories
             directories = glob.glob(os.path.join(base_path, "*"))
             if not directories:
                 logger.error("No log directories found")
                 return None
 
-            # Filter and get the latest directory created after injection start
             valid_dirs = []
             for dir_path in directories:
                 try:
-                    # Try to parse the directory name as a timestamp
                     dir_name = os.path.basename(dir_path)
                     dir_time = datetime.strptime(dir_name, "%Y%m%d_%H%M%S")
                     
-                    # Only include directories created after injection start time if specified
                     if injection_start_time is None or dir_time > injection_start_time:
                         valid_dirs.append((dir_time, dir_path))
                 except ValueError:
@@ -318,13 +294,12 @@ class DLLInjector:
                 logger.error("No valid timestamp directories found")
                 return None
 
-            # Sort by timestamp and get the latest
             latest_dir = max(valid_dirs, key=lambda x: x[0])[1]
             logger.info(f"Found latest log directory: {latest_dir}")
             return latest_dir
 
         except Exception as e:
-            logger.error(f"Error finding latest log directory: {e}")
+            logger.error(f"Error finding latest log directory: {str(e)}")
             return None
 
     def check_injection_status(self, pid, check_interval=10, injection_start_time=None):
@@ -341,11 +316,9 @@ class DLLInjector:
         max_wait_time = self.sleep_config['injection_max_wait']
         
         while time.time() - start_time < max_wait_time:
-            # Check if process is still running
             try:
                 if not psutil.pid_exists(pid):
                     logger.error("Game process crashed or ended unexpectedly")
-                    # Get the latest log directory to write crash signal
                     log_dir = self.get_latest_log_directory(base_log_path, injection_start_time)
                     if log_dir:
                         crash_signal_path = os.path.join(log_dir, "crash.signal")
@@ -354,24 +327,21 @@ class DLLInjector:
                                 f.write(f"Process {pid} crashed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
                             logger.info(f"Created crash signal file at {crash_signal_path}")
                         except Exception as e:
-                            logger.error(f"Failed to create crash signal file: {e}")
+                            logger.error(f"Failed to create crash signal file: {str(e)}")
                     return "crashed"
             except Exception as e:
-                logger.error(f"Error checking process status: {e}")
+                logger.error(f"Error checking process status: {str(e)}")
                 return False
 
-            # Get the latest log directory
             log_dir = self.get_latest_log_directory(base_log_path, injection_start_time)
             if not log_dir:
                 time.sleep(check_interval)
                 continue
 
             try:
-                # Check if process has ended
                 end_signal = os.path.exists(os.path.join(log_dir, "end.signal"))
                 
                 if end_signal:
-                    # Process has ended, check for success
                     success_signal = os.path.exists(os.path.join(log_dir, "success.signal"))
                     if success_signal:
                         logger.info("Injection completed successfully")
@@ -380,24 +350,21 @@ class DLLInjector:
                         logger.error("Injection failed: process ended without success signal")
                         return False
 
-                # Check if still running
                 running_signal = os.path.exists(os.path.join(log_dir, "running.signal"))
                 if running_signal:
                     logger.info("Injection still running...")
                     time.sleep(check_interval)
                     continue
                 
-                # If neither end.signal nor running.signal exists, something went wrong
                 logger.error("Injection failed: neither running.signal nor end.signal found")
                 return False
                 
             except Exception as e:
-                logger.error(f"Error checking injection status: {e}")
+                logger.error(f"Error checking injection status: {str(e)}")
                 return False
 
             time.sleep(check_interval)
 
-        # If we get here, we've timed out
         logger.error(f"Injection timed out after {max_wait_time} seconds")
         return "timeout"
 
@@ -410,11 +377,9 @@ class DLLInjector:
             process = psutil.Process(pid)
             process.terminate()
             
-            # Wait for the process to terminate
             try:
-                process.wait(timeout=10)  # Wait up to 10 seconds
+                process.wait(timeout=10)
             except psutil.TimeoutExpired:
-                # If timeout, try to kill it forcefully
                 process.kill()
                 process.wait(timeout=5)
                 
@@ -424,7 +389,7 @@ class DLLInjector:
             logger.info(f"Process with PID {pid} no longer exists")
             return True
         except Exception as e:
-            logger.error(f"Error terminating process {pid}: {e}")
+            logger.error(f"Error terminating process {pid}: {str(e)}")
             return False
 
     def inject_dll(self, pid):
@@ -433,15 +398,12 @@ class DLLInjector:
         """
         injection_start_time = datetime.now()
         try:
-            # First check if DLL Injector is already open
             windows = gw.getWindowsWithTitle("DLL Injector")
             if not windows:
-                # Launch DLL Injector if not found
                 logger.info("DLL Injector not found, launching...")
                 os.startfile(self.dll_injector_path)
-                time.sleep(self.sleep_config['dll_injector_start'])  # Wait for application to launch
+                time.sleep(self.sleep_config['dll_injector_start'])
                 
-                # Check again for the window
                 windows = gw.getWindowsWithTitle("DLL Injector")
                 if not windows:
                     logger.error("Could not find DLL Injector window after launch")
@@ -449,25 +411,23 @@ class DLLInjector:
             else:
                 logger.info("Found existing DLL Injector window, activating...")
 
-            print('before activate dll injector')
+            logger.debug("Activating DLL Injector window")
             window = windows[0]
             window.activate()
             time.sleep(1)
-            print('after activate dll injector')
-            # Get process name from PID
+
             try:
                 process = psutil.Process(pid)
                 process_name = process.name().lower()
                 logger.info(f"Target process: {process_name} (PID: {pid})")
             except Exception as e:
-                logger.error(f"Error getting process name: {e}")
+                logger.error(f"Error getting process name: {str(e)}")
                 return False
 
-            # Input file name
+            logger.debug("Inputting process ID...")
             self.click_relative(windows[0], 100, 115)
             time.sleep(self.sleep_config['window_activate'])
             
-            # Select all text using explicit key presses
             pg.keyDown('ctrl')
             time.sleep(self.sleep_config['keyboard_delay'])
             pg.press('a')
@@ -475,45 +435,36 @@ class DLLInjector:
             pg.keyUp('ctrl')
             time.sleep(self.sleep_config['window_activate'])
 
-            # Clear selection
             pg.press('backspace')
             time.sleep(self.sleep_config['click_delay'])
 
-            # Type the PID
             pg.write(str(pid))
             time.sleep(self.sleep_config['window_activate'])
 
-            # Select exe
-            logger.info("Selecting exe...")
+            logger.debug("Selecting executable...")
             self.click_relative(windows[0], 100, 135)
             time.sleep(self.sleep_config['window_activate'])
 
-            # Select dll
-            logger.info("Selecting DLL...")
+            logger.debug("Selecting DLL...")
             self.click_relative(windows[0], 200, 135)
             time.sleep(self.sleep_config['window_activate'])
 
-            # Final click (possibly menu or inject button)
-            logger.info("Initiating injection...")
+            logger.debug("Initiating injection...")
             self.click_relative(windows[0], 250, 15)
             time.sleep(self.sleep_config['window_activate'])
 
-            # Check injection status using log files
             injection_status = self.check_injection_status(pid=pid, injection_start_time=injection_start_time)
             
-            # Terminate the game process regardless of injection result
             logger.info("Attempting to terminate game process...")
             self.terminate_process(pid)
             
-            # Close the DLL Injector window
             try:
                 logger.info("Closing DLL Injector window...")
                 windows[0].close()
-                time.sleep(self.sleep_config['window_close'])  # Wait for window to close
+                time.sleep(self.sleep_config['window_close'])
             except Exception as e:
-                logger.error(f"Error closing DLL Injector window: {e}")
+                logger.error(f"Error closing DLL Injector window: {str(e)}")
             
-            # Return the injection status
             if injection_status is True:
                 logger.info("DLL injection completed successfully")
                 return True
@@ -531,10 +482,8 @@ class DLLInjector:
                 return False
 
         except Exception as e:
-            logger.error(f"Error during injection process: {e}")
-            # Try to terminate the process even if injection failed
+            logger.error(f"Error during injection process: {str(e)}")
             self.terminate_process(pid)
-            # Try to close the DLL Injector window even if injection failed
             try:
                 if 'windows' in locals():
                     logger.info("Closing DLL Injector window after error...")
@@ -542,7 +491,7 @@ class DLLInjector:
                         window.close()
                     time.sleep(self.sleep_config['window_close'])
             except Exception as close_error:
-                logger.error(f"Error closing DLL Injector window after error: {close_error}")
+                logger.error(f"Error closing DLL Injector window after error: {str(close_error)}")
             return False
 
     def check_and_click_start_game2(self, max_retries=5, retry_interval=2):
@@ -559,9 +508,9 @@ class DLLInjector:
                     start_game2_center = pg.center(start_game2_location)
                     pg.click(start_game2_center)
                     logger.info("Clicked Steam launch options button")
-                    time.sleep(2)  # Wait for the options to appear
+                    time.sleep(2)
                     return True
-                logger.info(f"Steam launch options not found, retrying ({i+1}/{max_retries})...")
+                logger.info(f"Steam launch options not found, retry {i+1}/{max_retries}")
                 time.sleep(retry_interval)
             except Exception as e:
                 logger.error(f"Error checking for Steam launch options: {str(e)}")
@@ -586,7 +535,7 @@ class DLLInjector:
                     logger.info("Clicked firewall permission button")
                     time.sleep(1)
                     return True
-                logger.info(f"Firewall permission dialog not found, retrying ({i+1}/{max_retries})...")
+                logger.info(f"Firewall permission dialog not found, retry {i+1}/{max_retries}")
                 time.sleep(retry_interval)
             except Exception as e:
                 logger.error(f"Error checking for firewall permission: {str(e)}")
@@ -611,7 +560,7 @@ class DLLInjector:
                     logger.info("Clicked 'still play game' button")
                     time.sleep(1)
                     return True
-                logger.info(f"Cloud save dialog not found, retrying ({i+1}/{max_retries})...")
+                logger.info(f"Cloud save dialog not found, retry {i+1}/{max_retries}")
                 time.sleep(retry_interval)
             except Exception as e:
                 logger.error(f"Error checking for cloud save dialog: {str(e)}")
@@ -624,61 +573,50 @@ class DLLInjector:
         """
         Full process: activate Steam window, detect playable button, click it, get game process, and inject DLL
         """
-        logger.info("Starting DLL injection process...")
-        if self.game_folder:
-            logger.info(f"Using game folder: {self.game_folder}")
-        else:
-            logger.info("No game folder specified, will detect any new process")
+        # logger.info("Starting DLL injection process...")
+        # if self.game_folder:
+        #     logger.info(f"Using game folder: {self.game_folder}")
+        # else:
+        #     logger.info("No game folder specified, will detect any new process")
         
-        # Step 1: Activate the Steam window
-        if not self.activate_steam_window():
-            logger.error("Failed to activate Steam window")
-            return False
+        # if not self.activate_steam_window():
+        #     logger.error("Failed to activate Steam window")
+        #     return False
         
-        # Step 2: Record processes BEFORE clicking playable button
-        logger.info("Recording processes before game launch...")
-        before_processes = self.get_running_processes()
+        # logger.info("Recording processes before game launch...")
+        # before_processes = self.get_running_processes()
         
-        # Step 3: Detect and click playable button
-        if not self.detect_and_click_playable():
-            logger.error("Failed to find and click playable button")
-            return False
+        # if not self.detect_and_click_playable():
+        #     logger.error("Failed to find and click playable button")
+        #     return False
         
-        # Step 3.5: Check for and handle Steam launch options
-        logger.info("Checking for Steam launch options...")
-        self.check_and_click_start_game2()
+        # logger.info("Checking for Steam launch options...")
+        # self.check_and_click_start_game2()
         
-        # Step 3.6: Check for and handle cloud save dialog
-        logger.info("Checking for cloud save dialog...")
-        self.check_and_click_still_play_game()
+        # logger.info("Checking for cloud save dialog...")
+        # self.check_and_click_still_play_game()
         
-        # Step 3.75: Check for and handle firewall permission dialog
         logger.info("Checking for firewall permission dialog...")
         self.check_and_click_yunxu()
         
-        # Step 4: Wait for the game process to start
         logger.info(f"Waiting for game to launch...")
-        # Print countdown while waiting
         for i in range(self.sleep_config['game_launch'], 0, -1):
             logger.info(f"Waiting for game launch... {i} seconds remaining")
             time.sleep(1)
         
-        # Step 5: Get processes after waiting
         logger.info("Recording processes after game launch...")
         after_processes = self.get_running_processes()
         
-        # Step 6: Find the most likely game process
         game_process = self.find_new_game_process(before_processes, after_processes)
         
         if not game_process:
             logger.error("Failed to detect game process")
             return False
         
-        # Minimize all windows to show desktop
         logger.info("Minimizing all windows (Win + D)...")
         pg.hotkey('win', 'd')
-        time.sleep(self.sleep_config['minimize_wait'])  # Brief pause after minimizing
-        # Step 7: Inject DLL into the game process
+        time.sleep(self.sleep_config['minimize_wait'])
+        
         pid = game_process["pid"]
         if self.inject_dll(pid):
             logger.info(f"Successfully injected DLL into {game_process['name']} (PID: {pid})")
@@ -691,7 +629,6 @@ class DLLInjector:
 if __name__ == "__main__":
     import sys
     
-    # Check if a game folder was provided as a command line argument
     game_folder = None
     dll_injector_path = "E:\\DLLInjector.lnk"
     
@@ -699,5 +636,7 @@ if __name__ == "__main__":
         game_folder = sys.argv[1]
     if len(sys.argv) > 2:
         dll_injector_path = sys.argv[2]
+    
+    logger.info(f"Starting DLL injection with game_folder: {game_folder}, dll_injector_path: {dll_injector_path}")
     injector = DLLInjector(game_folder, dll_injector_path)
     injector.run_injection_process()
