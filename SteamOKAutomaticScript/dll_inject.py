@@ -10,6 +10,8 @@ from logger import setup_logging
 import glob
 from config import get_config, load_config
 from tqdm import tqdm
+from image_utils import ImageDetector
+from window_utils import activate_window_by_title, activate_window_by_typing
 
 # Disable PyAutoGUI fail-safe (not recommended for safety reasons)
 pg.FAILSAFE = False
@@ -56,33 +58,22 @@ class DLLInjector:
         # Retry counts
         self.retry_counts = dll_config['retry_counts']
         
+        # Initialize image detector
+        self.image_detector = ImageDetector(self.config)
+        
         logger.info(f"DLLInjector initialized with game_folder: {self.game_folder}")
         logger.info(f"DLL injector path: {self.dll_injector_path}")
         
     def activate_steam_window(self):
         """Activate Steam window and bring it to the front"""
         try:
-            windows = gw.getWindowsWithTitle("Steam")
-            if not windows:
-                logger.error("Steam window not found")
-                return False
-
-            for window in windows:
-                if window.title == "Steam":
-                    window.restore()
-                    time.sleep(self.sleep_config['window_activate'])
-                    window.activate()
-                    time.sleep(self.sleep_config['window_activate'])
-                    
-                    pg.click((window.left + window.right)//2, window.top + 10)
-                    logger.info("Steam window activated successfully")
-                    return True
-
-            logger.error("No window with exact 'Steam' title found")
-            return False
+            # Try to activate Steam using the window_utils module
+            return activate_window_by_title("Steam", self.sleep_config)
+            
         except Exception as e:
-            logger.error(f"Failed to activate Steam window: {str(e)}")
-            return False
+            logger.error(f"Failed to activate Steam window with window_utils: {str(e)}")
+            # Fall back to the typing method if the above fails
+            return activate_window_by_typing("Steam", self.sleep_config)
         
     def detect_and_click_playable(self, max_retries=None, retry_interval=None):
         """
@@ -96,13 +87,11 @@ class DLLInjector:
         
         # Try each playable image in sequence
         for image_path, confidence in self.playable_image_paths:
-            result = self.check_and_click_image(
+            result = self.image_detector.check_and_click_image(
                 image_path=image_path,
-                image_name="playable button",
-                config_key='playable_detection',
+                confidence=confidence,
                 max_retries=max_retries,
-                retry_interval=retry_interval,
-                confidence=confidence
+                retry_interval=retry_interval
             )
             if result:
                 return True
@@ -503,90 +492,6 @@ class DLLInjector:
                 logger.error(f"Error closing DLL Injector window after error: {str(close_error)}")
             return False
 
-    def check_and_click_image(self, image_path, image_name, config_key, max_retries=None, retry_interval=None, confidence=None, wait_after_click=1):
-        """
-        Generic method to check for and click an image on screen
-        
-        Args:
-            image_path: Path to the image file to look for
-            image_name: Human-readable name of the image/button for logging
-            config_key: Key in retry_counts config to get max retries
-            max_retries: Override for max retries count
-            retry_interval: Override for retry interval
-            confidence: Override for confidence level
-            wait_after_click: Time to wait after clicking the image
-        
-        Returns:
-            True if image was found and clicked, False otherwise
-        """
-        max_retries = max_retries or self.retry_counts.get(config_key, 5)
-        retry_interval = retry_interval or self.sleep_config['retry_interval']
-        
-        # If confidence is not provided, try to get it from config based on image_name
-        if confidence is None:
-            # Extract image basename without extension for config lookup
-            image_basename = os.path.splitext(os.path.basename(image_path))[0]
-            confidence = self.config['dll_injection']['images'].get(f"{image_basename}_confidence", 0.75)
-        
-        logger.info(f"Checking for {image_name}...")
-        for i in range(max_retries):
-            try:
-                location = pg.locateOnScreen(image_path, confidence=confidence)
-                if location:
-                    logger.info(f"Found {image_name}")
-                    center = pg.center(location)
-                    pg.click(center)
-                    logger.info(f"Clicked {image_name}")
-                    time.sleep(wait_after_click)
-                    return True
-                logger.info(f"{image_name} not found, retry {i+1}/{max_retries}")
-                time.sleep(retry_interval)
-            except Exception as e:
-                logger.error(f"Error checking for {image_name}: {str(e)}")
-                time.sleep(retry_interval)
-        
-        logger.info(f"No {image_name} found after maximum retries")
-        return False
-
-    def check_and_click_start_game2(self, max_retries=None, retry_interval=None):
-        """
-        Check for and click the start_game2.png button if it appears
-        Returns True if button was found and clicked, False otherwise
-        """
-        return self.check_and_click_image(
-            image_path=self.start_game2_path,
-            image_name="Steam launch options button",
-            config_key='launch_options',
-            max_retries=max_retries,
-            retry_interval=retry_interval,
-            wait_after_click=2
-        )
-
-    def check_and_click_yunxu(self, max_retries=None, retry_interval=None):
-        """
-        Check for and click the yunxu (allow) button if it appears for firewall permissions
-        Returns True if button was found and clicked, False otherwise
-        """
-        return self.check_and_click_image(
-            image_path=self.yunxu_path,
-            image_name="firewall permission button",
-            config_key='firewall_permission',
-            max_retries=max_retries,
-            retry_interval=retry_interval
-        )
-
-    def check_and_click_still_play_game(self, max_retries=None, retry_interval=None):
-        """
-        Check for and click the still_play_game.png button if it appears
-        Returns True if button was found and clicked, False otherwise
-        """
-        return self.check_and_click_image(
-            image_path=self.still_play_game_path,
-            image_name="cloud save dialog button",
-            config_key='cloud_save',
-            max_retries=max_retries,
-            retry_interval=retry_interval
-        )
         
     def run_injection_process(self):
         """
@@ -611,15 +516,15 @@ class DLLInjector:
         
         # Define dialogs to check in order
         dialogs_to_check = [
-            {"method": self.check_and_click_start_game2, "name": "Steam launch options"},
-            {"method": self.check_and_click_still_play_game, "name": "cloud save dialog"},
-            {"method": self.check_and_click_yunxu, "name": "firewall permission dialog"}
+            {"method": self.check_and_click_start_game2, "name": "Steam launch options", "image_path": self.start_game2_path},
+            {"method": self.check_and_click_still_play_game, "name": "cloud save dialog", "image_path": self.still_play_game_path},
+            {"method": self.check_and_click_yunxu, "name": "firewall permission dialog", "image_path": self.yunxu_path}
         ]
         
         # Check for and handle various dialogs
         for dialog in dialogs_to_check:
             logger.info(f"Checking for {dialog['name']}...")
-            dialog["method"]()
+            self.image_detector.check_and_click_image()
         
         logger.info(f"Waiting for game to launch...")
         game_launch_time = self.sleep_config['game_launch']

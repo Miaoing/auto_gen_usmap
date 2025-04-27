@@ -12,6 +12,8 @@ from openpyxl import load_workbook
 from openpyxl.drawing.image import Image
 from license_agreement_handler import LicenseAgreementHandler
 from tqdm import tqdm
+from image_utils import ImageDetector
+from window_utils import activate_window_by_typing
 
 logger = logging.getLogger()
 
@@ -359,27 +361,7 @@ class SteamOKController:
 
     def activate_steam_window(self):
         """激活Steam窗口并确保它处于最前面"""
-        try:
-            # 按下Win键
-            pg.hotkey('win')
-            time.sleep(0.5)  # 等待开始菜单打开
-            
-            # 输入"Steam"
-            pg.write('Steam')
-            time.sleep(1)  # 等待搜索结果
-            
-            # 按两次回车键
-            pg.press('enter')
-            time.sleep(0.5)
-            pg.press('enter')
-            time.sleep(1)  # 等待Steam启动
-            
-            logger.info("Steam window activated using Win+Type method")
-            return True
-
-        except Exception as e:
-            logger.error(f"Error activating Steam window: {e}")
-            return False
+        return activate_window_by_typing("Steam")
 
     def move_steamok_to_background(self):
         """将SteamOK窗口移到后台"""

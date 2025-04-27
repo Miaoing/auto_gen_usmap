@@ -7,3 +7,4 @@ pygetwindow>=0.0.9  # Required for window management
 pyyaml>=6.0.0  # Required for configuration support
 colorama>=0.4.4  # Required for colored console output 
 tqdm>=4.64.0   # Required for progress bars
+opencv-python>=4.6.0  # Required for advanced image processing with pyautogui
