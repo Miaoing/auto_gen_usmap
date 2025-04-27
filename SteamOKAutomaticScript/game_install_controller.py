@@ -11,6 +11,7 @@ import win32gui
 from openpyxl import load_workbook
 from openpyxl.drawing.image import Image
 from license_agreement_handler import LicenseAgreementHandler
+from tqdm import tqdm
 
 logger = logging.getLogger()
 
@@ -35,8 +36,8 @@ class SteamOKController:
         """激活SteamOK窗口并确保它处于最前面"""
         try:
             # Press Win + D to show desktop first
-            pg.hotkey('win', 'd')
-            time.sleep(0.5)
+            # pg.hotkey('win', 'd')
+            # time.sleep(0.5)
             
             windows = gw.getWindowsWithTitle("SteamOK")
             if not windows:
@@ -464,8 +465,8 @@ class SteamOKController:
                 except Exception as e:
                     logger.debug(f"图像识别失败: {str(e)}", exc_info=True)
 
-                logger.info("⏳ 安装尚未完成，50秒后重试...")
-                time.sleep(50)
+                logger.info("⏳ 安装尚未完成，10秒后重试...")
+                time.sleep(10)
 
             except Exception as e:
                 logger.error(f"检测出错: {str(e)}，10秒后重试", exc_info=True)
@@ -554,7 +555,9 @@ class SteamOKController:
                 self._handle_game_error(game_name, error_msg)
                 return False
 
-            time.sleep(40)
+            logger.info("Waiting 40 seconds for game startup...")
+            for _ in tqdm(range(40), desc="Waiting for game startup"):
+                time.sleep(1)
             
             logger.info("Waiting for game to start...")
             while not self.move_steamok_to_background() and not self.activate_steam_window():
@@ -618,7 +621,8 @@ class SteamOKController:
         """Handle game processing errors consistently"""
         self.results[game_name] = False
         self.error_messages[game_name] = error_msg
-        self._save_game_result(game_name, False, error_msg)
+        print('not saving result!!!')
+        # self._save_game_result(game_name, False, error_msg)
         self.license_handler.stop()
 
     def _save_game_result(self, game_name, available, error_msg=None):
