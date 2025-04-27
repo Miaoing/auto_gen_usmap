@@ -7,6 +7,7 @@ from game_install_controller import SteamOKController
 from ocr_helper import OcrHelper
 from dll_inject import DLLInjector
 from config import load_config, get_config
+from csv_logger import GameStatusLogger
 
 # Load configuration first
 config = load_config()
@@ -26,13 +27,42 @@ def main():
         config = load_config(args.config)
         logger.info(f"Using custom configuration file: {args.config}")
     
+    # Initialize the CSV logger
+    csv_logger = GameStatusLogger()
+    logger.info(f"CSV logging enabled to: {csv_logger.get_csv_path()}")
+    
     # If injection mode is selected, run the injector and exit
     if args.inject:
         logger.info("Running in DLL injection mode...")
         # Initialize the DLL injector with configuration loaded from config
         injector = DLLInjector()
         result = injector.run_injection_process()
-        print(f"DLL injection {'successful' if result else 'failed'}")
+        
+        log_dir = None
+        if hasattr(injector, 'latest_log_dir') and injector.latest_log_dir:
+            log_dir = injector.latest_log_dir
+            logger.info(f"Injection log directory: {log_dir}")
+            
+        if isinstance(result, str):  # If result is a string, it's the USMap path
+            logger.info(f"DLL injection successful, USMap path: {result}")
+            csv_logger.log_injection_success("Unknown", result, log_dir)
+            print(f"DLL injection successful, USMap path: {result}")
+        elif result == "timeout":
+            logger.error("DLL injection timed out")
+            csv_logger.log_injection_timeout("Unknown", log_dir)
+            print("DLL injection timed out")
+        elif result == "crashed":
+            logger.error("DLL injection crashed")
+            csv_logger.log_injection_crash("Unknown", "Game process crashed", log_dir)
+            print("DLL injection crashed")
+        elif result:
+            logger.info("DLL injection successful")
+            csv_logger.log_injection_success("Unknown", "No USMap path found", log_dir)
+            print("DLL injection successful")
+        else:
+            logger.error("DLL injection failed")
+            csv_logger.log_injection_crash("Unknown", "Injection failed", log_dir)
+            print("DLL injection failed")
         return
     
     # Otherwise, run the normal game installation process
@@ -63,26 +93,63 @@ def main():
                 # Process the game (download and check if playable)
                 result = controller.process_game(game)
                 
+                if not result:
+                    logger.error(f"Game {game} failed to download or is not playable")
+                    csv_logger.log_download_error(game, "Game failed to download or is not playable")
+                    print(f"{game}: 不可玩, 未注入DLL")
+                    time.sleep(config['timing']['retry_delay'])
+                    continue
+                
+                # Log successful download
+                csv_logger.log_download_success(game)
+                logger.info(f"Game {game} is playable, download successful")
+                
                 # Initialize inject_result to False by default
                 inject_result = False
                 
                 # If the game is successfully processed and DLL injection is enabled in config
-                if result and config['dll_injection']['enabled']:
+                if config['dll_injection']['enabled']:
                     logger.info(f"Game {game} is playable, starting DLL injection process...")
                     inject_result = injector.run_injection_process()
-                    if inject_result:
-                        logger.info(f"DLL injection successful for game: {game}")
+                    
+                    # Get the latest log directory if available
+                    log_dir = None
+                    if hasattr(injector, 'latest_log_dir') and injector.latest_log_dir:
+                        log_dir = injector.latest_log_dir
+                        logger.info(f"Injection log directory for {game}: {log_dir}")
+                    
+                    if isinstance(inject_result, str):  # If result is a string, it's the USMap path
+                        logger.info(f"DLL injection successful for game: {game}, USMap path: {inject_result}")
+                        csv_logger.log_injection_success(game, inject_result, log_dir)
+                        print(f"{game}: 可玩, 已注入DLL, USMap路径: {inject_result}")
+                    elif inject_result == "timeout":
+                        logger.error(f"DLL injection timed out for game: {game}")
+                        csv_logger.log_injection_timeout(game, log_dir)
+                        print(f"{game}: 可玩, DLL注入超时")
+                    elif inject_result == "crashed":
+                        logger.error(f"Game crashed during injection: {game}")
+                        csv_logger.log_injection_crash(game, "Game process crashed", log_dir)
+                        print(f"{game}: 可玩, DLL注入时游戏崩溃")
+                    elif inject_result:
+                        logger.info(f"DLL injection successful for game: {game}, but no USMap path found")
+                        csv_logger.log_injection_success(game, "No USMap path found", log_dir)
+                        print(f"{game}: 可玩, 已注入DLL")
                     else:
                         logger.error(f"DLL injection failed for game: {game}")
+                        csv_logger.log_injection_crash(game, "Injection failed", log_dir)
+                        print(f"{game}: 可玩, 未注入DLL")
+                else:
+                    # If DLL injection is disabled
+                    print(f"{game}: 可玩, DLL注入已禁用")
                 
-                print(f"{game}: {'可玩' if result else '不可玩'}, {'已注入DLL' if result and inject_result else '未注入DLL'}")
                 time.sleep(config['timing']['retry_delay'])
             except Exception as e:
                 logger.error(f"处理游戏{game}时出错: {e}")
+                csv_logger.log_download_error(game, f"处理游戏时出错: {str(e)}")
                 print(f"处理游戏{game}时出错")
                 continue
 
-        print("处理完成。结果已保存")
+        print(f"处理完成。结果已保存到CSV文件: {csv_logger.get_csv_path()}")
     except Exception as e:
         logger.error(f"应用程序错误: {e}")
         print(f"错误: {e}")

@@ -62,6 +62,9 @@ class DLLInjector:
         # Initialize image detector
         self.image_detector = ImageDetector(self.config)
         
+        # Track the latest log directory
+        self.latest_log_dir = None
+        
         logger.info(f"DLLInjector initialized with game_folder: {self.game_folder}")
         logger.info(f"DLL injector path: {self.dll_injector_path}")
         
@@ -293,6 +296,10 @@ class DLLInjector:
 
             latest_dir = max(valid_dirs, key=lambda x: x[0])[1]
             logger.info(f"Found latest log directory: {latest_dir}")
+            
+            # Store the latest log directory as a class attribute
+            self.latest_log_dir = latest_dir
+            
             return latest_dir
 
         except Exception as e:
@@ -390,11 +397,71 @@ class DLLInjector:
             logger.error(f"Error terminating process {pid}: {str(e)}")
             return False
 
+    def get_usmap_path(self, log_dir):
+        """
+        Get the USMap path from the injection log directory
+        Returns the usmap path if found, None otherwise
+        """
+
+        # Try to find the USMap in the parent directory structure (sibling to log dir)
+        try:
+            # Get the parent directory of the log directory
+            parent_dir = os.path.dirname(os.path.dirname(log_dir))
+            logger.info(f"Checking parent directory: {parent_dir}")
+            
+            # Get the injection timestamp from the log directory name
+            log_dir_name = os.path.basename(log_dir)
+            injection_time = datetime.strptime(log_dir_name, "%Y%m%d_%H%M%S")
+            
+            # Find all timestamp directories under the parent directory
+            timestamp_dirs = []
+            for item in os.listdir(parent_dir):
+                item_path = os.path.join(parent_dir, item)
+                if os.path.isdir(item_path):
+                    try:
+                        # Try to parse the directory name as a timestamp
+                        dir_time = datetime.strptime(item, "%Y%m%d_%H%M%S")
+                        # Only consider directories created after injection
+                        if dir_time >= injection_time:
+                            timestamp_dirs.append((dir_time, item_path))
+                    except ValueError:
+                        # Not a timestamp directory, skip
+                        continue
+            
+            if timestamp_dirs:
+                # Sort by timestamp, most recent first
+                timestamp_dirs.sort(reverse=True)
+                
+                # Check each directory for a Mappings folder with usmap files
+                for _, dir_path in timestamp_dirs:
+                    mappings_dir = os.path.join(dir_path, "Mappings")
+                    
+                    if os.path.exists(mappings_dir) and os.path.isdir(mappings_dir):
+                        logger.info(f"Found Mappings directory: {mappings_dir}")
+                        
+                        # Look for .usmap files in the Mappings directory
+                        usmap_files = glob.glob(os.path.join(mappings_dir, "*.usmap"))
+                        
+                        if usmap_files:
+                            usmap_path = usmap_files[0]
+                            logger.info(f"Found USMap file in Mappings directory: {usmap_path}")
+                            return usmap_path
+        except Exception as e:
+            logger.error(f"Error searching for USMap in parent directory structure: {str(e)}")
+        
+        # If we get here, no usmap path was found
+        logger.error(f"No USMap file found for the injection")
+        return None
+
+
     def inject_dll(self, pid):
         """
         Inject DLL by directly interacting with DLL Injector GUI
+        Returns True if successful, False if failed, or the USMap path if injection succeeded
         """
         injection_start_time = datetime.now()
+        log_dir = None
+        
         try:
             windows = gw.getWindowsWithTitle("DLL Injector")
             if not windows:
@@ -452,6 +519,7 @@ class DLLInjector:
             time.sleep(self.sleep_config['window_activate'])
 
             injection_status = self.check_injection_status(pid=pid, injection_start_time=injection_start_time)
+            log_dir = self.get_latest_log_directory(self.base_log_directory, injection_start_time)
             
             logger.info("Attempting to terminate game process...")
             self.terminate_process(pid)
@@ -465,6 +533,11 @@ class DLLInjector:
             
             if injection_status is True:
                 logger.info("DLL injection completed successfully")
+                # Get USMap path if injection was successful
+                usmap_path = self.get_usmap_path(log_dir) if log_dir else None
+                if usmap_path:
+                    logger.info(f"USMap successfully generated at: {usmap_path}")
+                    return usmap_path
                 return True
             elif injection_status is False:
                 logger.error("DLL injection failed")
@@ -496,6 +569,7 @@ class DLLInjector:
     def run_injection_process(self):
         """
         Full process: activate Steam window, detect playable button, click it, get game process, and inject DLL
+        Returns True if successful, False if failed, or the USMap path if injection succeeded
         """
         logger.info("Starting DLL injection process...")
         if self.game_folder:
@@ -549,9 +623,14 @@ class DLLInjector:
         time.sleep(self.sleep_config['minimize_wait'])
         
         pid = game_process["pid"]
-        if self.inject_dll(pid):
+        injection_result = self.inject_dll(pid)
+        
+        if injection_result is True:
             logger.info(f"Successfully injected DLL into {game_process['name']} (PID: {pid})")
             return True
+        elif isinstance(injection_result, str):  # If result is a string, it's the USMap path
+            logger.info(f"Successfully injected DLL into {game_process['name']} (PID: {pid}) and generated USMap at: {injection_result}")
+            return injection_result
         else:
             logger.error(f"Failed to inject DLL into {game_process['name']} (PID: {pid})")
             return False
