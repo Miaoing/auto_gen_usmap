@@ -73,8 +73,9 @@ def main():
         if config['ocr']['enabled']:
             OcrHelper.initialize()
 
-        # Initialize controller with config settings
+        # Initialize the game controller with the Excel path from config
         controller = SteamOKController(excel_path=config['paths']['results_excel'])
+        # Note: Game installation timeout can be configured in config.yaml under timing.installation_timeout
         
         # Initialize the DLL injector
         injector = DLLInjector()

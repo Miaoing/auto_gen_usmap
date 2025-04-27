@@ -14,6 +14,7 @@ from license_agreement_handler import LicenseAgreementHandler
 from tqdm import tqdm
 from image_utils import ImageDetector
 from window_utils import activate_window_by_typing
+from config.config_loader import get_config
 
 logger = logging.getLogger()
 
@@ -27,18 +28,25 @@ class SteamOKController:
         self.confirm_quit_path = os.path.join(os.path.dirname(__file__), "png/confirm_quit.png")
         self.license_handler = LicenseAgreementHandler()  # 创建许可协议处理器实例
         
+        # Load configuration
+        self.config = get_config()
+        
         # Initialize paths for image detection
         self.steam_ok_not_save_path = os.path.join(os.path.dirname(__file__), "png/steamok_not_save.png")
         
         # Create ImageDetector with default config (we'll just use it for the check_and_click_image method)
-        config = {
+        image_detector_config = {
             'dll_injection': {
                 'sleep_timings': {'retry_interval': 2},
                 'retry_counts': {'default': 5},
                 'images': {'steam_ok_not_save_confidence': 0.8}
             }
         }
-        self.image_detector = ImageDetector(config)
+        self.image_detector = ImageDetector(image_detector_config)
+        
+        # Installation timeout from config (with fallback to 2 hours = 7200 seconds)
+        self.installation_timeout = self.config.get('timing', {}).get('installation_timeout', 7200)
+        logger.info(f"Installation timeout set to {self.installation_timeout} seconds ({self.installation_timeout/60:.1f} minutes)")
         
         logger.info(f"SteamOKController initialized with excel_path: {excel_path}")
 
@@ -417,14 +425,35 @@ class SteamOKController:
             return False
 
     def check_installation_complete(self):
-        """持续检测安装完成状态，失败后继续检测"""
+        """持续检测安装完成状态，失败后继续检测，有超时限制"""
         playable_image = os.path.join(os.path.dirname(__file__), "png/playable.png")
         playable2_image = os.path.join(os.path.dirname(__file__), "png/playable2.png")
 
+        # Record start time for timeout tracking
+        start_time = time.time()
+        check_count = 0
+        last_progress_update = ""
+        
+        # Get timeout in minutes for display purposes
+        timeout_minutes = self.installation_timeout / 60
+        
+        logger.info(f"⏳ 开始监控安装进度 ({timeout_minutes:.1f}分钟超时限制)")
+        
         while True:
             try:
+                # Check if we've exceeded the timeout
+                elapsed_time = time.time() - start_time
+                if elapsed_time > self.installation_timeout:
+                    logger.error(f"Installation timeout after {elapsed_time:.1f} seconds ({timeout_minutes:.1f} minute limit)")
+                    return False
+                
+                # Only log every 6 checks (approximately every minute) to reduce console output
+                check_count += 1
+                should_log = (check_count % 6 == 0)
+                
                 if not self.activate_steam_window():
-                    logger.warning("激活Steam窗口失败，5秒后重试...")
+                    if should_log:
+                        logger.warning("激活Steam窗口失败，5秒后重试...")
                     time.sleep(5)
                     continue
 
@@ -435,14 +464,18 @@ class SteamOKController:
                     
                     try:
                         playable2_location = pg.locateOnScreen(playable2_image, confidence=0.72)
-                        logger.debug(f"playable2图标检测成功")
+                        if should_log:
+                            logger.debug(f"playable2图标检测成功")
                     except Exception as e:
-                        logger.debug(f"playable2图标检测失败")                    
+                        if should_log and check_count > 12:  # Only log after 2 minutes
+                            logger.debug(f"playable2图标检测失败")                    
                     try:
                         playable_location = pg.locateOnScreen(playable_image, confidence=0.88)
-                        logger.debug(f"playable图标检测成功")
+                        if should_log:
+                            logger.debug(f"playable图标检测成功")
                     except Exception as e:
-                        logger.debug(f"playable图标检测失败")
+                        if should_log and check_count > 12:  # Only log after 2 minutes
+                            logger.debug(f"playable图标检测失败")
 
                     # 轻微移动Steam窗口以防止睡眠
                     windows = gw.getWindowsWithTitle("Steam")
@@ -455,17 +488,35 @@ class SteamOKController:
 
                     # 任意一个图标检测到就返回True
                     if playable2_location or playable_location:
-                        logger.info("✅ 检测到安装完成")
+                        elapsed_min = elapsed_time / 60
+                        logger.info(f"✅ 检测到安装完成，用时 {elapsed_min:.1f} 分钟")
                         return True
 
                 except Exception as e:
-                    logger.debug(f"图像识别失败: {str(e)}", exc_info=True)
+                    if should_log and check_count > 12:  # Only log after 2 minutes
+                        logger.debug(f"图像识别失败: {str(e)}")
 
-                logger.info("⏳ 安装尚未完成，10秒后重试...")
+                # Only log periodically to reduce console output
+                if should_log:
+                    elapsed_min = elapsed_time / 60
+                    progress_percent = min(int((elapsed_min / timeout_minutes) * 100), 99)
+                    
+                    # Create a progress bar-like indicator 
+                    progress_indicator = f"[{'=' * int(progress_percent/5)}{'>' if progress_percent < 99 else '='}{'.' * (20-int(progress_percent/5))}]"
+                    
+                    # Create a clean progress message
+                    current_progress = f"⏳ 安装进度: {progress_indicator} {progress_percent}% ({elapsed_min:.1f}/{timeout_minutes:.1f}分钟)"
+                    
+                    # Only print if the message has changed
+                    if current_progress != last_progress_update:
+                        logger.info(current_progress)
+                        last_progress_update = current_progress
+                
                 time.sleep(10)
 
             except Exception as e:
-                logger.error(f"检测出错: {str(e)}，10秒后重试", exc_info=True)
+                if check_count % 6 == 0:  # Only log every 6 checks
+                    logger.error(f"检测出错: {str(e)}，10秒后重试")
                 time.sleep(10)
 
     def check_and_click_not_save_button(self):
@@ -558,7 +609,11 @@ class SteamOKController:
                         success = True
                         break
                     else:
-                        logger.warning("Game installation not complete, retrying...")
+                        timeout_minutes = self.installation_timeout / 60
+                        error_msg = f"Installation timeout after {timeout_minutes:.1f} minutes"
+                        logger.error(error_msg)
+                        self._handle_game_error(game_name, error_msg)
+                        return False
                 
                 time.sleep(5)
 
@@ -582,8 +637,12 @@ class SteamOKController:
         """Handle game processing errors consistently"""
         self.results[game_name] = False
         self.error_messages[game_name] = error_msg
-        print('not saving result!!!')
-        # self._save_game_result(game_name, False, error_msg)
+        
+        # Don't use print, use logger instead
+        logger.error(f"Game processing failed: {game_name} - {error_msg}")
+        
+        # Save the result to CSV/Excel
+        self._save_game_result(game_name, False, error_msg)
         self.license_handler.stop()
 
     def _save_game_result(self, game_name, available, error_msg=None):
@@ -591,19 +650,39 @@ class SteamOKController:
         try:
             df = pd.read_excel(self.excel_path)
             game_index = df.index[df.iloc[:, 1] == game_name].tolist()
+            
+            # Get current timestamp for logging
+            timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+            
             if game_index:
+                # Update availability status (column 2)
                 df.iloc[game_index[0], 2] = "是" if available else "否"
+                
+                # If not available, update error message column
                 if not available and error_msg:
-                    df.iloc[game_index[0], 3] = error_msg
+                    # Format error message with timestamp for timeout errors
+                    if "timeout" in error_msg.lower():
+                        timeout_minutes = self.installation_timeout / 60
+                        error_with_time = f"[{timestamp}] 安装超时({timeout_minutes:.1f}分钟): {error_msg}"
+                        df.iloc[game_index[0], 3] = error_with_time
+                    else:
+                        error_with_time = f"[{timestamp}] {error_msg}"
+                        df.iloc[game_index[0], 3] = error_with_time
+                
+                # Update timestamp column if it exists (assuming it's column 4)
+                if df.shape[1] > 4:  
+                    df.iloc[game_index[0], 4] = timestamp
 
+            # Save the updated Excel file
             df.to_excel(self.excel_path, index=False)
             logger.info(f"Saved result for {game_name} to {self.excel_path}")
 
+            # Also save to text file as backup
             os.makedirs(os.path.dirname(self.excel_path), exist_ok=True)
             txt_path = os.path.join(os.path.dirname(self.excel_path), 'game_results.txt')
             with open(txt_path, 'a', encoding='utf-8') as f:
                 status = "可以开玩" if available else "不可开玩"
-                error_info = f" (错误: {error_msg})" if not available and error_msg else ""
+                error_info = f" (错误: {error_msg}, 时间: {timestamp})" if not available and error_msg else ""
                 f.write(f"{game_name}: {status}{error_info}\n")
 
         except Exception as e:
@@ -618,10 +697,10 @@ class SteamOKController:
                 game_index = df.index[df.iloc[:, 0] == game].tolist()
                 if game_index:
                     # 更新游戏状态（第二列）
-                    df.iloc[game_index[0], 1] = "是" if result else "否"
+                    df.iloc[game_index[0], 1] = "是" if available else "否"
                     # 如果游戏安装失败，在第三列记录错误信息
-                    if not result and game_name in self.error_messages:
-                        df.iloc[game_index[0], 2] = self.error_messages[game_name]
+                    if not available and game in self.error_messages:
+                        df.iloc[game_index[0], 2] = self.error_messages[game]
 
             # 保存更新后的Excel文件
             df.to_excel(self.excel_path, index=False)
