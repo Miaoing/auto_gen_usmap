@@ -4,3 +4,6 @@ pillow>=9.0.0  # Required by pyautogui for screenshots
 numpy>=1.21.0  # Required by cnocr 
 psutil>=5.9.0  # Required for process detection
 pygetwindow>=0.0.9  # Required for window management 
+pyyaml>=6.0.0  # Required for configuration support
+colorama>=0.4.4  # Required for colored console output 
+tqdm>=4.64.0   # Required for progress bars

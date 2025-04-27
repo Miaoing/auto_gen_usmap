@@ -8,6 +8,8 @@ import pygetwindow as gw
 from datetime import datetime
 from logger import setup_logging
 import glob
+from config import get_config, load_config
+from tqdm import tqdm
 
 # Disable PyAutoGUI fail-safe (not recommended for safety reasons)
 pg.FAILSAFE = False
@@ -15,32 +17,47 @@ pg.FAILSAFE = False
 logger = setup_logging()
 
 class DLLInjector:
-    def __init__(self, game_folder, dll_injector_path="E:\\DLLInjector.lnk"):
-        self.game_folder = game_folder
-        self.dll_injector_path = dll_injector_path
-        self.playable_image_paths = [
-            (os.path.join(os.path.dirname(__file__), "png/playable.png"), 0.8),
-            (os.path.join(os.path.dirname(__file__), "png/start_game.png"), 0.75)
-        ]
-        self.start_game2_path = os.path.join(os.path.dirname(__file__), "png/start_game2.png")
-        self.yunxu_path = os.path.join(os.path.dirname(__file__), "png/yunxu.png")
-        self.still_play_game_path = os.path.join(os.path.dirname(__file__), "png/still_play_game.png")
+    def __init__(self):
+        # Load configuration
+        self.config = get_config()
         
-        # Sleep configuration dictionary
-        self.sleep_config = {
-            'window_activate': 0.3,  # Time to wait after window activation
-            'click_delay': 0.5,      # Time to wait after clicking
-            'dll_injector_start': 5, # Time to wait for DLL Injector to start
-            'process_check': 2,      # Time between process checks
-            'game_launch': 30,       # Time to wait for game to launch
-            'minimize_wait': 1,      # Time to wait after minimizing windows
-            'retry_interval': 2,     # Time between retries for various operations
-            'keyboard_delay': 0.1,   # Time between keyboard actions
-            'injection_check': 2,    # Time between injection status checks
-            'window_close': 1,       # Time to wait after closing windows
-            'injection_max_wait': 240, # Maximum time to wait for injection (4 minutes)
-        }
-        logger.info(f"DLLInjector initialized with game_folder: {game_folder}")
+        # Initialize parameters from config
+        self.game_folder = self.config['paths']['steam_apps_common']
+        self.dll_injector_path = self.config['paths']['dll_injector_path']
+        
+        # Image paths and confidence levels from config
+        dll_config = self.config['dll_injection']
+        
+        # Set up image paths with confidence levels for playable button
+        playable_image = os.path.join(os.path.dirname(__file__), dll_config['images']['playable_image'])
+        playable_confidence = dll_config['images']['playable_confidence']
+        start_game_image = os.path.join(os.path.dirname(__file__), dll_config['images']['start_game_image'])
+        start_game_confidence = dll_config['images']['start_game_confidence']
+        
+        self.playable_image_paths = [
+            (playable_image, playable_confidence),
+            (start_game_image, start_game_confidence)
+        ]
+        
+        # Set up paths for other dialog images
+        self.start_game2_path = os.path.join(os.path.dirname(__file__), dll_config['images']['start_game2_image'])
+        self.yunxu_path = os.path.join(os.path.dirname(__file__), dll_config['images']['yunxu_image'])
+        self.still_play_game_path = os.path.join(os.path.dirname(__file__), dll_config['images']['still_play_game_image'])
+        
+        # Load sleep configuration from config
+        self.sleep_config = dll_config['sleep_timings']
+        
+        # Get system process keywords for filtering
+        self.system_process_keywords = dll_config['process_detection']['system_process_keywords']
+        
+        # Base log directory
+        self.base_log_directory = dll_config['paths']['log_directory']
+        
+        # Retry counts
+        self.retry_counts = dll_config['retry_counts']
+        
+        logger.info(f"DLLInjector initialized with game_folder: {self.game_folder}")
+        logger.info(f"DLL injector path: {self.dll_injector_path}")
         
     def activate_steam_window(self):
         """Activate Steam window and bring it to the front"""
@@ -67,35 +84,30 @@ class DLLInjector:
             logger.error(f"Failed to activate Steam window: {str(e)}")
             return False
         
-    def detect_and_click_playable(self, max_retries=10, retry_interval=2):
+    def detect_and_click_playable(self, max_retries=None, retry_interval=None):
         """
         Detect the 'playable.png' image on screen and click it.
         Returns True if successful, False otherwise.
         """
-        logger.info("Searching for playable button...")
-        for i in range(max_retries):
-            try:
-                for image_path, confidence in self.playable_image_paths:
-                    logger.debug(f"Checking image: {image_path} with confidence: {confidence}")
-                    try:
-                        playable_location = pg.locateOnScreen(image_path, confidence=confidence)
-                        if playable_location:
-                            logger.info("Found playable button")
-                            playable_center = pg.center(playable_location)
-                            pg.click(playable_center)
-                            logger.info("Clicked playable button successfully")
-                            return True
-                    except Exception as e:
-                        logger.debug(f"Error locating image: {str(e)}")
-
-                    logger.info(f"Playable button not found, retry {i+1}/{max_retries}")
-                    time.sleep(retry_interval)
-                
-            except Exception as e:
-                logger.error(f"Error detecting playable button: {str(e)}")
-                time.sleep(retry_interval)
+        max_retries = max_retries or self.retry_counts['playable_detection']
+        retry_interval = retry_interval or self.sleep_config['retry_interval']
         
-        logger.error("Failed to find playable button after maximum retries")
+        logger.info("Searching for playable button...")
+        
+        # Try each playable image in sequence
+        for image_path, confidence in self.playable_image_paths:
+            result = self.check_and_click_image(
+                image_path=image_path,
+                image_name="playable button",
+                config_key='playable_detection',
+                max_retries=max_retries,
+                retry_interval=retry_interval,
+                confidence=confidence
+            )
+            if result:
+                return True
+                
+        logger.error("Failed to find playable button after trying all images")
         return False
     
     def get_running_processes(self):
@@ -191,14 +203,9 @@ class DLLInjector:
             if pid not in before_pids:
                 new_processes.append((name, exe, pid))
         
-        system_keywords = [
-            'svchost', 'explorer', 'dllhost', 'runtimebroker', 'steamwebhelper',
-            'taskmgr', 'python', 'cmd', 'conhost', 'searchapp', 'rundll32'
-        ]
-        
         game_processes = []
         for name, exe, pid in new_processes:
-            if not any(keyword in name.lower() for keyword in system_keywords) and name.lower().endswith('.exe'):
+            if not any(keyword in name.lower() for keyword in self.system_process_keywords) and name.lower().endswith('.exe'):
                 if self.game_folder is None or self.is_from_game_folder(exe):
                     game_processes.append((name, exe, pid))
                     logger.info(f"Found potential game process: {name} (PID: {pid}) at {exe}")
@@ -269,10 +276,11 @@ class DLLInjector:
             logger.error(f"Error in click_relative: {str(e)}")
             return False
 
-    def get_latest_log_directory(self, base_path="C:\\Dumper-7\\log", injection_start_time=None):
+    def get_latest_log_directory(self, base_path, injection_start_time):
         """
         Get the most recent log directory created after injection start time
         """
+        
         try:
             directories = glob.glob(os.path.join(base_path, "*"))
             if not directories:
@@ -302,7 +310,7 @@ class DLLInjector:
             logger.error(f"Error finding latest log directory: {str(e)}")
             return None
 
-    def check_injection_status(self, pid, check_interval=10, injection_start_time=None):
+    def check_injection_status(self, pid, check_interval=None, injection_start_time=None):
         """
         Check the injection status by monitoring log files
         Returns: 
@@ -311,8 +319,9 @@ class DLLInjector:
             - "timeout" if injection took too long
             - "crashed" if game process ended unexpectedly
         """
+        check_interval = check_interval or self.sleep_config['injection_check']
         start_time = time.time()
-        base_log_path = "C:\\Dumper-7\\log"
+        base_log_path = self.base_log_directory
         max_wait_time = self.sleep_config['injection_max_wait']
         
         while time.time() - start_time < max_wait_time:
@@ -494,116 +503,129 @@ class DLLInjector:
                 logger.error(f"Error closing DLL Injector window after error: {str(close_error)}")
             return False
 
-    def check_and_click_start_game2(self, max_retries=5, retry_interval=2):
+    def check_and_click_image(self, image_path, image_name, config_key, max_retries=None, retry_interval=None, confidence=None, wait_after_click=1):
+        """
+        Generic method to check for and click an image on screen
+        
+        Args:
+            image_path: Path to the image file to look for
+            image_name: Human-readable name of the image/button for logging
+            config_key: Key in retry_counts config to get max retries
+            max_retries: Override for max retries count
+            retry_interval: Override for retry interval
+            confidence: Override for confidence level
+            wait_after_click: Time to wait after clicking the image
+        
+        Returns:
+            True if image was found and clicked, False otherwise
+        """
+        max_retries = max_retries or self.retry_counts.get(config_key, 5)
+        retry_interval = retry_interval or self.sleep_config['retry_interval']
+        
+        # If confidence is not provided, try to get it from config based on image_name
+        if confidence is None:
+            # Extract image basename without extension for config lookup
+            image_basename = os.path.splitext(os.path.basename(image_path))[0]
+            confidence = self.config['dll_injection']['images'].get(f"{image_basename}_confidence", 0.75)
+        
+        logger.info(f"Checking for {image_name}...")
+        for i in range(max_retries):
+            try:
+                location = pg.locateOnScreen(image_path, confidence=confidence)
+                if location:
+                    logger.info(f"Found {image_name}")
+                    center = pg.center(location)
+                    pg.click(center)
+                    logger.info(f"Clicked {image_name}")
+                    time.sleep(wait_after_click)
+                    return True
+                logger.info(f"{image_name} not found, retry {i+1}/{max_retries}")
+                time.sleep(retry_interval)
+            except Exception as e:
+                logger.error(f"Error checking for {image_name}: {str(e)}")
+                time.sleep(retry_interval)
+        
+        logger.info(f"No {image_name} found after maximum retries")
+        return False
+
+    def check_and_click_start_game2(self, max_retries=None, retry_interval=None):
         """
         Check for and click the start_game2.png button if it appears
         Returns True if button was found and clicked, False otherwise
         """
-        logger.info("Checking for Steam launch options...")
-        for i in range(max_retries):
-            try:
-                start_game2_location = pg.locateOnScreen(self.start_game2_path, confidence=0.75)
-                if start_game2_location:
-                    logger.info("Found Steam launch options button")
-                    start_game2_center = pg.center(start_game2_location)
-                    pg.click(start_game2_center)
-                    logger.info("Clicked Steam launch options button")
-                    time.sleep(2)
-                    return True
-                logger.info(f"Steam launch options not found, retry {i+1}/{max_retries}")
-                time.sleep(retry_interval)
-            except Exception as e:
-                logger.error(f"Error checking for Steam launch options: {str(e)}")
-                time.sleep(retry_interval)
-        
-        logger.info("No Steam launch options found after maximum retries")
-        return False
+        return self.check_and_click_image(
+            image_path=self.start_game2_path,
+            image_name="Steam launch options button",
+            config_key='launch_options',
+            max_retries=max_retries,
+            retry_interval=retry_interval,
+            wait_after_click=2
+        )
 
-    def check_and_click_yunxu(self, max_retries=5, retry_interval=1):
+    def check_and_click_yunxu(self, max_retries=None, retry_interval=None):
         """
         Check for and click the yunxu (allow) button if it appears for firewall permissions
         Returns True if button was found and clicked, False otherwise
         """
-        logger.info("Checking for firewall permission dialog...")
-        for i in range(max_retries):
-            try:
-                yunxu_location = pg.locateOnScreen(self.yunxu_path, confidence=0.75)
-                if yunxu_location:
-                    logger.info("Found firewall permission button")
-                    yunxu_center = pg.center(yunxu_location)
-                    pg.click(yunxu_center)
-                    logger.info("Clicked firewall permission button")
-                    time.sleep(1)
-                    return True
-                logger.info(f"Firewall permission dialog not found, retry {i+1}/{max_retries}")
-                time.sleep(retry_interval)
-            except Exception as e:
-                logger.error(f"Error checking for firewall permission: {str(e)}")
-                time.sleep(retry_interval)
-        
-        logger.info("No firewall permission dialog found after maximum retries")
-        return False
+        return self.check_and_click_image(
+            image_path=self.yunxu_path,
+            image_name="firewall permission button",
+            config_key='firewall_permission',
+            max_retries=max_retries,
+            retry_interval=retry_interval
+        )
 
-    def check_and_click_still_play_game(self, max_retries=5, retry_interval=1):
+    def check_and_click_still_play_game(self, max_retries=None, retry_interval=None):
         """
         Check for and click the still_play_game.png button if it appears
         Returns True if button was found and clicked, False otherwise
         """
-        logger.info("Checking for cloud save dialog...")
-        for i in range(max_retries):
-            try:
-                still_play_location = pg.locateOnScreen(self.still_play_game_path, confidence=0.75)
-                if still_play_location:
-                    logger.info("Found cloud save dialog")
-                    still_play_center = pg.center(still_play_location)
-                    pg.click(still_play_center)
-                    logger.info("Clicked 'still play game' button")
-                    time.sleep(1)
-                    return True
-                logger.info(f"Cloud save dialog not found, retry {i+1}/{max_retries}")
-                time.sleep(retry_interval)
-            except Exception as e:
-                logger.error(f"Error checking for cloud save dialog: {str(e)}")
-                time.sleep(retry_interval)
+        return self.check_and_click_image(
+            image_path=self.still_play_game_path,
+            image_name="cloud save dialog button",
+            config_key='cloud_save',
+            max_retries=max_retries,
+            retry_interval=retry_interval
+        )
         
-        logger.info("No cloud save dialog found after maximum retries")
-        return False
-
     def run_injection_process(self):
         """
         Full process: activate Steam window, detect playable button, click it, get game process, and inject DLL
         """
-        # logger.info("Starting DLL injection process...")
-        # if self.game_folder:
-        #     logger.info(f"Using game folder: {self.game_folder}")
-        # else:
-        #     logger.info("No game folder specified, will detect any new process")
+        logger.info("Starting DLL injection process...")
+        if self.game_folder:
+            logger.info(f"Using game folder: {self.game_folder}")
+        else:
+            logger.info("No game folder specified, will detect any new process")
         
-        # if not self.activate_steam_window():
-        #     logger.error("Failed to activate Steam window")
-        #     return False
+        if not self.activate_steam_window():
+            logger.error("Failed to activate Steam window")
+            return False
         
-        # logger.info("Recording processes before game launch...")
-        # before_processes = self.get_running_processes()
+        logger.info("Recording processes before game launch...")
+        before_processes = self.get_running_processes()
         
-        # if not self.detect_and_click_playable():
-        #     logger.error("Failed to find and click playable button")
-        #     return False
+        if not self.detect_and_click_playable():
+            logger.error("Failed to find and click playable button")
+            return False
         
-        # logger.info("Checking for Steam launch options...")
-        # self.check_and_click_start_game2()
+        # Define dialogs to check in order
+        dialogs_to_check = [
+            {"method": self.check_and_click_start_game2, "name": "Steam launch options"},
+            {"method": self.check_and_click_still_play_game, "name": "cloud save dialog"},
+            {"method": self.check_and_click_yunxu, "name": "firewall permission dialog"}
+        ]
         
-        # logger.info("Checking for cloud save dialog...")
-        # self.check_and_click_still_play_game()
-        
-        logger.info("Checking for firewall permission dialog...")
-        self.check_and_click_yunxu()
+        # Check for and handle various dialogs
+        for dialog in dialogs_to_check:
+            logger.info(f"Checking for {dialog['name']}...")
+            dialog["method"]()
         
         logger.info(f"Waiting for game to launch...")
-        for i in range(self.sleep_config['game_launch'], 0, -1):
-            logger.info(f"Waiting for game launch... {i} seconds remaining")
+        game_launch_time = self.sleep_config['game_launch']
+        for _ in tqdm(range(game_launch_time), desc="Waiting for game launch", unit="s"):
             time.sleep(1)
-        
+
         logger.info("Recording processes after game launch...")
         after_processes = self.get_running_processes()
         
@@ -629,14 +651,19 @@ class DLLInjector:
 if __name__ == "__main__":
     import sys
     
-    game_folder = None
-    dll_injector_path = "E:\\DLLInjector.lnk"
+    # Load configuration
+    config = load_config()
     
+    # Parse command line arguments if any
     if len(sys.argv) > 1:
-        game_folder = sys.argv[1]
-    if len(sys.argv) > 2:
-        dll_injector_path = sys.argv[2]
+        config_path = sys.argv[1]
+        logger.info(f"Loading custom configuration from: {config_path}")
+        config = load_config(config_path)
+
+    # Create and run injector
+    logger.info("Starting DLL injection process")
+    injector = DLLInjector()
     
-    logger.info(f"Starting DLL injection with game_folder: {game_folder}, dll_injector_path: {dll_injector_path}")
-    injector = DLLInjector(game_folder, dll_injector_path)
-    injector.run_injection_process()
+    result = injector.run_injection_process()
+    logger.info(f"DLL injection process {'successful' if result else 'failed'}")
+    print(f"DLL injection {'successful' if result else 'failed'}")
