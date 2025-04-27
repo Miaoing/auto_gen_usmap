@@ -26,6 +26,20 @@ class SteamOKController:
         self.excel_path = excel_path  # Excel文件路径
         self.confirm_quit_path = os.path.join(os.path.dirname(__file__), "png/confirm_quit.png")
         self.license_handler = LicenseAgreementHandler()  # 创建许可协议处理器实例
+        
+        # Initialize paths for image detection
+        self.steam_ok_not_save_path = os.path.join(os.path.dirname(__file__), "png/steamok_not_save.png")
+        
+        # Create ImageDetector with default config (we'll just use it for the check_and_click_image method)
+        config = {
+            'dll_injection': {
+                'sleep_timings': {'retry_interval': 2},
+                'retry_counts': {'default': 5},
+                'images': {'steam_ok_not_save_confidence': 0.8}
+            }
+        }
+        self.image_detector = ImageDetector(config)
+        
         logger.info(f"SteamOKController initialized with excel_path: {excel_path}")
 
     def _format_game_name(self, game_name):
@@ -454,6 +468,22 @@ class SteamOKController:
                 logger.error(f"检测出错: {str(e)}，10秒后重试", exc_info=True)
                 time.sleep(10)
 
+    def check_and_click_not_save_button(self):
+        """Check for and click the 'Not Save' button if it appears"""
+        logger.info("Checking for 'Not Save' button...")
+        result = self.image_detector.check_and_click_image(
+            image_path=self.steam_ok_not_save_path,
+            max_retries=3,
+            confidence=0.8
+        )
+        
+        if result:
+            logger.info("'Not Save' button found and clicked successfully")
+        else:
+            logger.info("'Not Save' button was not found or could not be clicked (this is normal if the dialog isn't shown)")
+            
+        return result
+
     def process_game(self, game_name):
         """处理单个游戏的完整流程"""
         try:
@@ -467,6 +497,11 @@ class SteamOKController:
                 logger.error(f"{error_msg} for game: {game_name}")
                 self._handle_game_error(game_name, error_msg)
                 return False
+            
+            # Check for and click "Not Save" button if it appears
+            if self.check_and_click_not_save_button():
+                # If button was found and clicked, give it a moment to process
+                time.sleep(1.5)
             
             if not self.search_game(game_name):
                 error_msg = "Failed to search game"
