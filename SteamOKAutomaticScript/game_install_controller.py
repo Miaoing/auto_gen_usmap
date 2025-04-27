@@ -472,51 +472,6 @@ class SteamOKController:
                 logger.error(f"检测出错: {str(e)}，10秒后重试", exc_info=True)
                 time.sleep(10)
 
-    def check_stop_game_button(self):
-        """检查并点击停止游戏按钮"""
-        try:
-            stop_button_image = os.path.join(os.path.dirname(__file__), "png/stop_game.png")
-            stop_button_location = pg.locateOnScreen(stop_button_image, confidence=0.9)
-
-            if stop_button_location:
-                stop_button_center = (
-                    stop_button_location[0] + stop_button_location[2] / 2,
-                    stop_button_location[1] + stop_button_location[3] / 2
-                )
-                pg.click(stop_button_center)
-                time.sleep(1)
-                logger.info("Clicked '停止游戏' button")
-                return True
-            else:
-                logger.error("'停止游戏' button not found")
-                return False
-
-        except Exception as e:
-            logger.error(f"Error checking stop game button: {e}")
-            return False
-
-    def check_confirm_quit_button(self):
-        """检查并点击确认退出按钮"""
-        try:
-            confirm_quit_location = pg.locateOnScreen(self.confirm_quit_path, confidence=0.9)
-
-            if confirm_quit_location:
-                confirm_quit_center = (
-                    confirm_quit_location[0] + confirm_quit_location[2] / 2,
-                    confirm_quit_location[1] + confirm_quit_location[3] / 2
-                )
-                pg.click(confirm_quit_center)
-                time.sleep(1)
-                logger.info("Clicked '确认退出' button")
-                return True
-            else:
-                logger.error("'确认退出' button not found")
-                return False
-
-        except Exception as e:
-            logger.error(f"Error checking confirm quit button: {e}")
-            return False
-
     def process_game(self, game_name):
         """处理单个游戏的完整流程"""
         try:
@@ -577,17 +532,6 @@ class SteamOKController:
                     time.sleep(5)
                     continue
                 
-                if self.check_stop_game_button():
-                    logger.info("Successfully clicked stop game button")
-                    time.sleep(5)
-                    if self.check_confirm_quit_button():
-                        logger.info("Successfully clicked confirm quit button")
-                        time.sleep(10)
-                        success = True
-                        break
-                    else:
-                        logger.warning("Confirm quit button not found, retrying...")
-
                 if not self.move_steamok_to_background():
                     logger.warning("Failed to minimize SteamOK window")
                 elif self.click_install_button():
@@ -602,7 +546,7 @@ class SteamOKController:
                 time.sleep(5)
 
             if not success:
-                error_msg = "Timeout: Failed to stop game or complete installation after 10 attempts"
+                error_msg = "Timeout: Failed to complete installation after 10 attempts"
                 logger.error(error_msg)
                 self._handle_game_error(game_name, error_msg)
                 return False
