@@ -1,0 +1,118 @@
+# SteamOKAutomaticScript Configuration
+
+# Paths Configuration
+paths:
+  # Excel file paths
+  results_excel: "result/test_games.xlsx"
+  test_games_excel: "result/test_games.xlsx"
+  
+  # Screenshot directory
+  screenshots_dir: "screenshots"
+  
+  # Logs configuration
+  logs_dir: "logs"
+  log_file: "logs/steamok_auto.log"
+  
+  # Steam installation directory (for DLL injection)
+  steam_apps_common: "F:/steam/steamapps/common"
+  
+  # DLL injector executable path
+  dll_injector_path: "E:/DLLInjector.lnk"
+
+# Image Recognition
+image_recognition:
+  # Confidence levels for image recognition (0.0-1.0)
+  search_box_confidence: 0.7
+  game_list_header_confidence: 0.65
+  install_button_confidence: 0.7
+  play_button_confidence: 0.7
+  
+  # Image paths (relative to project root)
+  search_box_image: "png/search_box.png"
+  game_list_image: "png/game_list.png"
+  install_button_image: "png/install_button.png"
+  play_button_image: "png/play_button.png"
+  confirm_quit_image: "png/confirm_quit.png"
+
+# Timing Configuration
+timing:
+  # Delays in seconds
+  window_activation_delay: 0.5
+  search_input_delay: 0.5
+  search_result_delay: 2.0
+  click_delay: 0.5
+  installation_check_interval: 10  # How often to check if installation is complete
+  installation_timeout: 1800  # 30 minutes maximum for installation
+  game_launch_timeout: 300  # 5 minutes maximum for game launch
+  game_close_timeout: 60  # 1 minute maximum for game closing
+  retry_delay: 5  # How long to wait between retries
+
+# Game Processing
+game_processing:
+  max_retries: 3  # Maximum number of retry attempts for game installation
+  background_check_interval: 5  # How often to check background processes
+  
+# DLL Injection
+dll_injection:
+  enabled: true  # Whether to perform DLL injection
+  timeout: 60  # Maximum time to wait for DLL injection in seconds
+  
+  # DLL Injection specific paths
+  paths:
+    # Path to base log directory for injection logs
+    log_directory: "C:/Dumper-7/log"
+  
+  # Image paths for DLL injection process
+  images:
+    playable_image: "png/playable.png"
+    playable_confidence: 0.8
+    start_game_image: "png/start_game.png"
+    start_game_confidence: 0.75
+    start_game2_image: "png/start_game2.png"
+    start_game2_confidence: 0.75
+    yunxu_image: "png/yunxu.png"
+    yunxu_confidence: 0.75
+    still_play_game_image: "png/still_play_game.png"
+    still_play_game_confidence: 0.75
+  
+  # Process detection
+  process_detection:
+    # System process keywords to filter out when finding game processes
+    system_process_keywords:
+      - "svchost"
+      - "explorer"
+      - "dllhost"
+      - "runtimebroker"
+      - "steamwebhelper"
+      - "taskmgr"
+      - "python"
+      - "cmd"
+      - "conhost"
+      - "searchapp"
+      - "rundll32"
+  
+  # Sleep timings for DLL injection process
+  sleep_timings:
+    window_activate: 0.3       # Time to wait after window activation
+    click_delay: 0.5           # Time to wait after clicking
+    dll_injector_start: 5      # Time to wait for DLL Injector to start
+    process_check: 2           # Time between process checks
+    game_launch: 15            # Time to wait for game to launch
+    minimize_wait: 1           # Time to wait after minimizing windows
+    retry_interval: 2          # Time between retries for various operations
+    keyboard_delay: 0.1        # Time between keyboard actions
+    injection_check: 2         # Time between injection status checks
+    window_close: 1            # Time to wait after closing windows
+    injection_max_wait: 240    # Maximum time to wait for injection (4 minutes)
+  
+  # Retry counts for injection steps
+  retry_counts:
+    playable_detection: 10     # Max retries for detecting playable button
+    launch_options: 5          # Max retries for detecting Steam launch options
+    firewall_permission: 5     # Max retries for detecting firewall permissions
+    cloud_save: 5              # Max retries for detecting cloud save dialog
+
+# OCR Configuration
+ocr:
+  enabled: true  # Whether to use OCR features
+  models_dir: "resources/ocr_models" 
