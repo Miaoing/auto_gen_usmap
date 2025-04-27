@@ -11,7 +11,7 @@ from csv_logger import GameStatusLogger
 
 # Load configuration first
 config = load_config()
-logger = setup_logging(log_file=config['paths']['log_file'])
+logger = setup_logging()
 
 
 def main():
