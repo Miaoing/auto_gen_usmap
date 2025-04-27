@@ -406,7 +406,7 @@ class DLLInjector:
         # Try to find the USMap in the parent directory structure (sibling to log dir)
         try:
             # Get the parent directory of the log directory
-            parent_dir = os.path.dirname(os.path.dirname(log_dir))
+            parent_dir = os.path.dirname((os.path.dirname(os.path.dirname(log_dir))))
             logger.info(f"Checking parent directory: {parent_dir}")
             
             # Get the injection timestamp from the log directory name
@@ -420,7 +420,7 @@ class DLLInjector:
                 if os.path.isdir(item_path):
                     try:
                         # Try to parse the directory name as a timestamp
-                        dir_time = datetime.strptime(item, "%Y%m%d_%H%M%S")
+                        dir_time = datetime.fromtimestamp(os.path.getctime(item_path))
                         # Only consider directories created after injection
                         if dir_time >= injection_time:
                             timestamp_dirs.append((dir_time, item_path))

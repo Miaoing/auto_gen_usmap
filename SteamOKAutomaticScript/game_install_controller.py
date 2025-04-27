@@ -467,7 +467,7 @@ class SteamOKController:
                 logger.error(f"{error_msg} for game: {game_name}")
                 self._handle_game_error(game_name, error_msg)
                 return False
-
+            
             if not self.search_game(game_name):
                 error_msg = "Failed to search game"
                 logger.error(f"{error_msg}: {game_name}")
