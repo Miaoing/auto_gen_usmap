@@ -65,15 +65,17 @@ dll_injection:
   # Image paths for DLL injection process
   images:
     playable_image: "png/playable.png"
-    playable_confidence: 0.8
+    playable_confidence: 0.9
     start_game_image: "png/start_game.png"
-    start_game_confidence: 0.75
+    start_game_confidence: 0.9
     start_game2_image: "png/start_game2.png"
-    start_game2_confidence: 0.75
+    start_game2_confidence: 0.9
+    comfirm_vr_image: "png/comfirm_vr.png"
+    comfirm_vr_confidence: 0.9
     yunxu_image: "png/yunxu.png"
-    yunxu_confidence: 0.75
+    yunxu_confidence: 0.9
     still_play_game_image: "png/still_play_game.png"
-    still_play_game_confidence: 0.75
+    still_play_game_confidence: 0.9
   
   # Process detection
   process_detection:

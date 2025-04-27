@@ -28,7 +28,7 @@ class ImageDetector:
         self.sleep_config = config['dll_injection']['sleep_timings']
         self.retry_counts = config['dll_injection']['retry_counts']
     
-    def check_and_click_image(self, image_path, max_retries=5, retry_interval=None, 
+    def check_and_click_image(self, image_path, max_retries=5,
                              confidence=None, wait_after_click=1):
         """
         Generic method to check for and click an image on screen

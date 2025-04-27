@@ -43,6 +43,7 @@ class DLLInjector:
         
         # Set up paths for other dialog images
         self.start_game2_path = os.path.join(os.path.dirname(__file__), dll_config['images']['start_game2_image'])
+        self.comfirm_vr_path = os.path.join(os.path.dirname(__file__), dll_config['images']['comfirm_vr_image'])
         self.yunxu_path = os.path.join(os.path.dirname(__file__), dll_config['images']['yunxu_image'])
         self.still_play_game_path = os.path.join(os.path.dirname(__file__), dll_config['images']['still_play_game_image'])
         
@@ -75,13 +76,13 @@ class DLLInjector:
             # Fall back to the typing method if the above fails
             return activate_window_by_typing("Steam", self.sleep_config)
         
-    def detect_and_click_playable(self, max_retries=None, retry_interval=None):
+    def detect_and_click_playable(self):
         """
         Detect the 'playable.png' image on screen and click it.
         Returns True if successful, False otherwise.
         """
-        max_retries = max_retries or self.retry_counts['playable_detection']
-        retry_interval = retry_interval or self.sleep_config['retry_interval']
+        max_retries = self.retry_counts['playable_detection']
+        retry_interval = self.sleep_config['retry_interval']
         
         logger.info("Searching for playable button...")
         
@@ -91,7 +92,6 @@ class DLLInjector:
                 image_path=image_path,
                 confidence=confidence,
                 max_retries=max_retries,
-                retry_interval=retry_interval
             )
             if result:
                 return True
@@ -516,15 +516,19 @@ class DLLInjector:
         
         # Define dialogs to check in order
         dialogs_to_check = [
-            {"method": self.check_and_click_start_game2, "name": "Steam launch options", "image_path": self.start_game2_path},
-            {"method": self.check_and_click_still_play_game, "name": "cloud save dialog", "image_path": self.still_play_game_path},
-            {"method": self.check_and_click_yunxu, "name": "firewall permission dialog", "image_path": self.yunxu_path}
+            {"name": "Steam launch options", "image_path": self.start_game2_path},
+            {"name": "VR launch options", "image_path": self.comfirm_vr_path},
+            {"name": "cloud save dialog", "image_path": self.still_play_game_path},
+            {"name": "firewall permission dialog", "image_path": self.yunxu_path}
         ]
         
         # Check for and handle various dialogs
         for dialog in dialogs_to_check:
             logger.info(f"Checking for {dialog['name']}...")
-            self.image_detector.check_and_click_image()
+            self.image_detector.check_and_click_image(
+                image_path=dialog['image_path'],
+                max_retries=5,
+            )
         
         logger.info(f"Waiting for game to launch...")
         game_launch_time = self.sleep_config['game_launch']
