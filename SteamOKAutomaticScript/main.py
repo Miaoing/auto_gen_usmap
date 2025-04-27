@@ -6,19 +6,30 @@ from logger import setup_logging
 from game_install_controller import SteamOKController
 from ocr_helper import OcrHelper
 from dll_inject import DLLInjector
+from config import load_config, get_config
 
-logger = setup_logging()
+# Load configuration first
+config = load_config()
+logger = setup_logging(log_file=config['paths']['log_file'])
 
 
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='SteamOK Automatic Script')
     parser.add_argument('--inject', action='store_true', help='Run the DLL injection process')
+    parser.add_argument('--config', help='Path to custom configuration file')
     args = parser.parse_args()
+    
+    # If custom config is provided, reload configuration
+    if args.config:
+        global config
+        config = load_config(args.config)
+        logger.info(f"Using custom configuration file: {args.config}")
     
     # If injection mode is selected, run the injector and exit
     if args.inject:
         logger.info("Running in DLL injection mode...")
+        # Initialize the DLL injector with configuration loaded from config
         injector = DLLInjector()
         result = injector.run_injection_process()
         print(f"DLL injection {'successful' if result else 'failed'}")
@@ -27,13 +38,19 @@ def main():
     # Otherwise, run the normal game installation process
     try:
         logger.info("脚本启动中...")
-        OcrHelper.initialize()
+        
+        # Initialize OCR if enabled in config
+        if config['ocr']['enabled']:
+            OcrHelper.initialize()
 
-        controller = SteamOKController()
-        injector = DLLInjector(r'F:\steam\steamapps\common')  # Initialize the DLL injector
+        # Initialize controller with config settings
+        controller = SteamOKController(excel_path=config['paths']['results_excel'])
+        
+        # Initialize the DLL injector
+        injector = DLLInjector()
         
         try:
-            df = pd.read_excel('result/games.xlsx')
+            df = pd.read_excel(config['paths']['test_games_excel'])
             start_index = df.index[df.iloc[:, 2].isna()].tolist()[0] if any(df.iloc[:, 2].isna()) else 0
             games = df.iloc[start_index:, 1].tolist()
             logger.info(f"从第{start_index + 1}行开始加载{len(games)}个游戏")
@@ -49,8 +66,8 @@ def main():
                 # Initialize inject_result to False by default
                 inject_result = False
                 
-                # If the game is successfully processed (downloaded and playable), run DLL injection
-                if result:
+                # If the game is successfully processed and DLL injection is enabled in config
+                if result and config['dll_injection']['enabled']:
                     logger.info(f"Game {game} is playable, starting DLL injection process...")
                     inject_result = injector.run_injection_process()
                     if inject_result:
@@ -59,7 +76,7 @@ def main():
                         logger.error(f"DLL injection failed for game: {game}")
                 
                 print(f"{game}: {'可玩' if result else '不可玩'}, {'已注入DLL' if result and inject_result else '未注入DLL'}")
-                time.sleep(2)
+                time.sleep(config['timing']['retry_delay'])
             except Exception as e:
                 logger.error(f"处理游戏{game}时出错: {e}")
                 print(f"处理游戏{game}时出错")
