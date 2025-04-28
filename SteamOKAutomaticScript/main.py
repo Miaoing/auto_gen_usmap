@@ -20,7 +20,6 @@ logger = setup_logging()
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='SteamOK Automatic Script')
-    parser.add_argument('--inject', action='store_true', help='Run the DLL injection process')
     parser.add_argument('--config', help='Path to custom configuration file')
     args = parser.parse_args()
     
@@ -37,44 +36,7 @@ def main():
     # Initialize the debug screenshot manager
     screenshot_mgr = DebugScreenshotManager()
     
-    # Connect the screenshot manager to the game controller
-    screenshot_mgr
-    
-    # If injection mode is selected, run the injector and exit
-    if args.inject:
-        logger.info("Running in DLL injection mode...")
-        # Initialize the DLL injector with configuration loaded from config
-        injector = DLLInjector()
-        result = injector.run_injection_process()
-        
-        log_dir = None
-        if hasattr(injector, 'latest_log_dir') and injector.latest_log_dir:
-            log_dir = injector.latest_log_dir
-            logger.info(f"Injection log directory: {log_dir}")
-            
-        if isinstance(result, str):  # If result is a string, it's the USMap path
-            logger.info(f"DLL injection successful, USMap path: {result}")
-            csv_logger.log_injection_success("Unknown", result, log_dir)
-            print(f"DLL injection successful, USMap path: {result}")
-        elif result == "timeout":
-            logger.error("DLL injection timed out")
-            csv_logger.log_injection_timeout("Unknown", log_dir)
-            print("DLL injection timed out")
-        elif result == "crashed":
-            logger.error("DLL injection crashed")
-            csv_logger.log_injection_crash("Unknown", "Game process crashed", log_dir)
-            print("DLL injection crashed")
-        elif result:
-            logger.info("DLL injection successful")
-            csv_logger.log_injection_success("Unknown", "No USMap path found", log_dir)
-            print("DLL injection successful")
-        else:
-            logger.error("DLL injection failed")
-            csv_logger.log_injection_crash("Unknown", "Injection failed", log_dir)
-            print("DLL injection failed")
-        return
-    
-    # Otherwise, run the normal game installation process
+    # Run the normal game installation process
     try:
         logger.info("脚本启动中...")
         
