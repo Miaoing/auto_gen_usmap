@@ -16,7 +16,7 @@ paths:
   steam_apps_common: "F:/steam/steamapps/common"
   
   # DLL injector executable path
-  dll_injector_path: "E:/DLLInjector.lnk"
+  dll_injector_path: "E:/DLL Injector.lnk"
 
 # Image Recognition
 image_recognition:
