@@ -88,7 +88,7 @@ class CSVWatcher:
 if __name__ == "__main__":
     # Replace this with your actual webhook URL
     WEBHOOK_URL = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=41d709ab-4cbd-43bd-99a8-0be822b7584a"
-    CSV_FILE = r"data.csv"
+    CSV_FILE = r"C:\Users\Administrator\Documents\workspace\auto_gen_usmap\SteamOKAutomaticScript\result\game_status_20250428_114928.csv"
     
     # Create and start the watcher
     watcher = CSVWatcher(CSV_FILE, WEBHOOK_URL)

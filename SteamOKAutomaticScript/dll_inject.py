@@ -284,7 +284,6 @@ class DLLInjector:
                     continue
 
             if not valid_dirs:
-                logger.error("No valid timestamp directories found")
                 return None
 
             latest_dir = max(valid_dirs, key=lambda x: x[0])[1]
@@ -334,6 +333,8 @@ class DLLInjector:
             log_dir = self.get_latest_log_directory(base_log_path, injection_start_time)
             if not log_dir:
                 time.sleep(check_interval)
+                if time.time() % 60 == 0:
+                    logger.error("No valid timestamp directories found")
                 continue
 
             try:
