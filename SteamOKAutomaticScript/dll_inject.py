@@ -30,7 +30,7 @@ class DLLInjector:
         # Get DLL injector configuration
         dll_config = self.config['dll_injection']
 
-        self.dll_injector_path = dll_config['dll_injector_path']
+        self.dll_injector_path = dll_config['paths']['dll_injector_path']
         
         # Image paths and confidence levels from config
         
@@ -81,7 +81,7 @@ class DLLInjector:
         
         # Try each playable image in sequence
         for image_path in self.playable_image_paths:
-            if self.image_detector.check_and_click_image(image_path=image_path, max_retries=max_retries)
+            if self.image_detector.check_and_click_image(image_path=image_path, max_retries=max_retries):
                 return True
                 
         logger.error("Failed to find playable button after trying all images")

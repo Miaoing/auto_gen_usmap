@@ -12,7 +12,7 @@ class LicenseAgreementHandler:
         self.thread = None
         # 定义所有可能的接受按钮图片
         self.accept_button_images = [
-            os.path.join(os.path.dirname(__file__), "png/accept.png"),
+            os.path.join(os.path.dirname(__file__), "png/steam_accept_button.png"),
             os.path.join(os.path.dirname(__file__), "png/accept2.png")
         ]
         self.check_interval = 2  # 检查间隔（秒）
