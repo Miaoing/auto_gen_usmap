@@ -3,8 +3,8 @@
 # Paths Configuration
 paths:
   # Excel file paths
-  results_excel: "result/games.xlsx"
-  test_games_excel: "result/games.xlsx"
+  results_excel: "result/test_games.xlsx"
+  test_games_excel: "result/test_games.xlsx"
   
   # Screenshot directory
   screenshots_dir: "screenshots"
