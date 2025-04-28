@@ -35,6 +35,16 @@ class SteamOKController:
         # Load configuration
         self.config = get_config()
         
+        # Get Steam apps path from config and derive downloading folder
+        self.steam_apps_common = self.config.get('paths', {}).get('steam_apps_common')
+        # Get the base steamapps folder by removing '/common' from the end
+        self.steam_apps_base = os.path.dirname(self.steam_apps_common)
+        # Create the path to the downloading folder
+        self.steam_apps_downloading = os.path.join(self.steam_apps_base, 'downloading')
+        
+        # For tracking folders in downloading directory that existed before installation
+        self.downloading_folders_before_install = set()
+        
         # Initialize paths for image detection
         self.steam_ok_not_save_path = os.path.join(os.path.dirname(__file__), "png/steamok_not_save.png")
         
@@ -270,6 +280,15 @@ class SteamOKController:
             logger.info("Starting installation button click process")
             time.sleep(1)
             
+            # Record existing folders in downloading directory before installation
+            if os.path.exists(self.steam_apps_downloading) and os.path.isdir(self.steam_apps_downloading):
+                self.downloading_folders_before_install = set(d for d in os.listdir(self.steam_apps_downloading) 
+                                                           if os.path.isdir(os.path.join(self.steam_apps_downloading, d)))
+                logger.info(f"Found {len(self.downloading_folders_before_install)} existing folders in downloading directory")
+            else:
+                logger.warning(f"Downloading directory {self.steam_apps_downloading} not found or not accessible")
+                self.downloading_folders_before_install = set()
+            
             install_button_image = os.path.join(os.path.dirname(__file__), "png/install.png")
             reinstall_button_image = os.path.join(os.path.dirname(__file__), "png/reInstall.png")
             
@@ -389,6 +408,75 @@ class SteamOKController:
             logger.error(f"Error minimizing game window: {e}")
             return False
 
+    def check_for_easyanticheat(self, game_name):
+        """
+        Check if an EasyAntiCheat folder exists in new game directories in the downloading folder.
+        Only checks folders that appeared after installation started.
+        Returns True if found, False otherwise.
+        """
+        try:
+            eac_folders_found = []
+            
+            # Only check the downloading folder for newly created directories
+            if os.path.exists(self.steam_apps_downloading) and os.path.isdir(self.steam_apps_downloading):
+                logger.debug(f"Checking downloading folder for new directories: {self.steam_apps_downloading}")
+                
+                # Get current download directories
+                current_download_dirs = set(d for d in os.listdir(self.steam_apps_downloading) 
+                                          if os.path.isdir(os.path.join(self.steam_apps_downloading, d)))
+                
+                # Find new directories that weren't there before installation started
+                new_download_dirs = current_download_dirs - self.downloading_folders_before_install
+                
+                if new_download_dirs:
+                    logger.info(f"Found {len(new_download_dirs)} new download directories: {', '.join(new_download_dirs)}")
+                else:
+                    logger.debug("No new download directories found")
+                    return False, None
+                
+                # Process each new download directory
+                for download_dir in new_download_dirs:
+                    download_path = os.path.join(self.steam_apps_downloading, download_dir)
+                    logger.debug(f"Checking new download directory: {download_path}")
+                    
+                    # Check for EasyAntiCheat folder directly in the download directory
+                    eac_folder = os.path.join(download_path, 'EasyAntiCheat')
+                    if os.path.exists(eac_folder) and os.path.isdir(eac_folder):
+                        logger.warning(f"⚠️ EasyAntiCheat folder detected in new downloading directory: {download_dir}!")
+                        
+                        # Take screenshot if available
+                        if self.screenshot_mgr:
+                            self.screenshot_mgr.take_screenshot(game_name, "easyanticheat_detected_downloading", min_interval_seconds=0)
+                        
+                        eac_folders_found.append(("downloading", download_dir))
+                    
+                    # Check subdirectories recursively for EasyAntiCheat folders
+                    for root, dirs, _ in os.walk(download_path):
+                        if 'EasyAntiCheat' in dirs:
+                            eac_path = os.path.join(root, 'EasyAntiCheat')
+                            relative_path = os.path.relpath(root, download_path)
+                            logger.warning(f"⚠️ EasyAntiCheat folder detected in subdirectory of downloading/{download_dir}/{relative_path}!")
+                            
+                            # Take screenshot if available
+                            if self.screenshot_mgr:
+                                self.screenshot_mgr.take_screenshot(game_name, "easyanticheat_detected_subdir_downloading", min_interval_seconds=0)
+                            
+                            eac_folders_found.append(("downloading", f"{download_dir}/{relative_path}"))
+            
+            # Return True if any EasyAntiCheat folders were found
+            if eac_folders_found:
+                # Return the first folder where EasyAntiCheat was detected
+                folder_type, folder_path = eac_folders_found[0]
+                logger.warning(f"🛑 EasyAntiCheat detected in {folder_type}/{folder_path}")
+                return True, f"{folder_type}/{folder_path}"
+            
+            return False, None
+            
+        except Exception as e:
+            logger.error(f"Error checking for EasyAntiCheat: {str(e)}")
+            logger.exception("Stack trace:")
+            return False, None
+
     def check_installation_complete(self, game_name=None):
         """持续检测安装完成状态，失败后继续检测，有超时限制"""
         playable_image = os.path.join(os.path.dirname(__file__), "png/playable.png")
@@ -401,6 +489,9 @@ class SteamOKController:
         
         # Get timeout in minutes for display purposes
         timeout_minutes = self.installation_timeout / 60
+        
+        # Track when we last checked for EasyAntiCheat
+        last_eac_check = 0
         
         logger.info(f"⏳ 开始监控安装进度 ({timeout_minutes:.1f}分钟超时限制)")
         
@@ -415,6 +506,23 @@ class SteamOKController:
                 # Only log every 6 checks (approximately every minute) to reduce console output
                 check_count += 1
                 should_log = (check_count % 6 == 0)
+                
+                # Check for EasyAntiCheat every 30 seconds
+                if check_count - last_eac_check >= 3:
+                    has_eac, game_dir = self.check_for_easyanticheat(game_name)
+                    if has_eac:
+                        logger.warning(f"🛑 EasyAntiCheat detected in game directory. Aborting installation.")
+                        
+                        # Update the Excel file with EasyAntiCheat status
+                        error_msg = f"EasyAntiCheat detected in game folder: {game_dir}"
+                        self._handle_game_error(game_name, error_msg)
+                        
+                        # Take final screenshot 
+                        if self.screenshot_mgr:
+                            self.screenshot_mgr.take_screenshot(game_name, "easyanticheat_abort", min_interval_seconds=0)
+                            
+                        return False
+                    last_eac_check = check_count
                 
                 if not self.activate_steam_window():
                     if should_log:
@@ -638,14 +746,18 @@ class SteamOKController:
                 
                 # If not available, update error message column
                 if not available and error_msg:
+                    # Check if this is an EasyAntiCheat error
+                    if "EasyAntiCheat" in error_msg:
+                        df.iloc[game_index[0], 2] = "EasyAntiCheat"  # Special status for EAC games
+                        error_with_time = f"[{timestamp}] {error_msg}"
                     # Format error message with timestamp for timeout errors
-                    if "timeout" in error_msg.lower():
+                    elif "timeout" in error_msg.lower():
                         timeout_minutes = self.installation_timeout / 60
                         error_with_time = f"[{timestamp}] 安装超时({timeout_minutes:.1f}分钟): {error_msg}"
-                        df.iloc[game_index[0], 3] = error_with_time
                     else:
                         error_with_time = f"[{timestamp}] {error_msg}"
-                        df.iloc[game_index[0], 3] = error_with_time
+                        
+                    df.iloc[game_index[0], 3] = error_with_time
                 
                 # Update timestamp column if it exists (assuming it's column 4)
                 if df.shape[1] > 4:  
@@ -659,7 +771,10 @@ class SteamOKController:
             os.makedirs(os.path.dirname(self.excel_path), exist_ok=True)
             txt_path = os.path.join(os.path.dirname(self.excel_path), 'game_results.txt')
             with open(txt_path, 'a', encoding='utf-8') as f:
-                status = "可以开玩" if available else "不可开玩"
+                if not available and error_msg and "EasyAntiCheat" in error_msg:
+                    status = "有EasyAntiCheat"
+                else:
+                    status = "可以开玩" if available else "不可开玩"
                 error_info = f" (错误: {error_msg}, 时间: {timestamp})" if not available and error_msg else ""
                 f.write(f"{game_name}: {status}{error_info}\n")
 
