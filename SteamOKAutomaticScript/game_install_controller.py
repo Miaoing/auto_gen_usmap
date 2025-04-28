@@ -14,7 +14,7 @@ from license_agreement_handler import LicenseAgreementHandler
 from tqdm import tqdm
 from image_utils import ImageDetector
 from window_utils import activate_window_by_typing, activate_window_by_title, activate_window
-from config.config_loader import get_config
+from config import get_config, load_config
 
 logger = logging.getLogger()
 
@@ -28,12 +28,14 @@ class SteamOKController:
         self.current_game_index = 0  # 当前处理的游戏索引
         self.error_messages = {}  # 存储游戏安装失败的错误信息
         self.excel_path = excel_path  # Excel文件路径
-        self.confirm_quit_path = os.path.join(os.path.dirname(__file__), "png/confirm_quit.png")
         self.license_handler = LicenseAgreementHandler()  # 创建许可协议处理器实例
         self.screenshot_mgr = screenshot_mgr  # Store screenshot manager as instance variable
         
         # Load configuration
         self.config = get_config()
+        self.game_controller_config = self.config.get('game_controller')
+        self.playable_button_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['playable_button_image'])
+        self.playable_download_icon_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['playable_download_icon_image'])
         
         # Get Steam apps paths from config
         self.steam_apps_base = self.config.get('paths').get('steam_apps_base')
@@ -41,25 +43,22 @@ class SteamOKController:
         self.steam_apps_common = os.path.join(self.steam_apps_base, 'common')
         # Create the path to the downloading folder
         self.steam_apps_downloading = os.path.join(self.steam_apps_base, 'downloading')
-        
         # For tracking folders in downloading directory that existed before installation
         self.downloading_folders_before_install = set()
         
         # Initialize paths for image detection
-        self.steam_ok_not_save_path = os.path.join(os.path.dirname(__file__), "png/steamok_not_save.png")
+        self.steamok_not_save_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steamok_not_save_image'])
+        self.steamok_search_box_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steamok_search_box_image'])
+        self.steamok_game_list_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steamok_game_list_image'])
+        self.steamok_play_button_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steamok_play_button_image'])
+        self.steamok_confirm_play_button_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steamok_confirm_play_button_image'])
+        self.steam_install_button_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steam_install_button_image'])
+        self.steam_reinstall_button_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steam_reinstall_button_image'])
+        self.steam_accept_button_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steam_accept_button_image'])
+        self.image_detector = ImageDetector(self.config)
         
-        # Create ImageDetector with default config (we'll just use it for the check_and_click_image method)
-        image_detector_config = {
-            'dll_injection': {
-                'sleep_timings': {'retry_interval': 2},
-                'retry_counts': {'default': 5},
-                'images': {'steam_ok_not_save_confidence': 0.8}
-            }
-        }
-        self.image_detector = ImageDetector(image_detector_config)
-        
-        # Installation timeout from config (with fallback to 2 hours = 7200 seconds)
-        self.installation_timeout = self.config.get('timing', {}).get('installation_timeout', 7200)
+        # Installation timeout from config
+        self.installation_timeout = self.config.get('timing').get('installation_timeout')
         logger.info(f"Installation timeout set to {self.installation_timeout} seconds ({self.installation_timeout/60:.1f} minutes)")
         
         logger.info(f"SteamOKController initialized with excel_path: {excel_path}")
@@ -76,19 +75,16 @@ class SteamOKController:
 
     def activate_steamok_window(self):
         """激活SteamOK窗口并确保它处于最前面"""
-        return activate_window("SteamOK", self.config.get('timing', {}))
+        return activate_window("SteamOK", self.config.get('timing'))
 
     def activate_steam_window(self):
         """激活Steam窗口并确保它处于最前面"""
-        return activate_window("Steam", self.config.get('timing', {}))
+        return activate_window("Steam", self.config.get('timing'))
 
     def search_game(self, game_name):
         try:
 
-            search_box_image = os.path.join(
-                os.path.dirname(__file__),
-                "png/search_box.png"
-            )
+            search_box_image = self.steamok_search_box_image
             logger.debug(f"Search box image path: {search_box_image}")
 
             # 尝试提高匹配精度
@@ -169,10 +165,7 @@ class SteamOKController:
         """通过OCR找到游戏列表的表头位置"""
         try:
             # 读取游戏列表表头截图
-            game_list_header_image = os.path.join(
-                os.path.dirname(__file__),
-                "png/game_list.png"
-            )
+            game_list_header_image = self.steamok_game_list_image
             # 尝试提高匹配精度
             game_list_header_location = pg.locateOnScreen(
                 game_list_header_image,
@@ -221,8 +214,8 @@ class SteamOKController:
     def check_play_button(self):
         """检查并点击'马上开玩'按钮"""
         try:
-            # 尝试通过OCR识别 '马上开玩' 按钮
-            play_button_image = os.path.join(os.path.dirname(__file__), "png/play.png")
+            # 尝试通过OCR识别 '马上玩' 按钮
+            play_button_image = self.steamok_play_button_image
             play_button_location = pg.locateOnScreen(play_button_image, confidence=0.9)  # 提高精度
 
             if play_button_location:
@@ -250,7 +243,7 @@ class SteamOKController:
         """检查并点击确认按钮"""
         try:
             # 尝试通过OCR识别确认按钮
-            confirm_button_image = os.path.join(os.path.dirname(__file__), "png/confirm_button.png")
+            confirm_button_image = self.steamok_confirm_play_button_image
             confirm_button_location = pg.locateOnScreen(confirm_button_image, confidence=0.84)  # 提高精度
 
             if confirm_button_location:
@@ -289,8 +282,8 @@ class SteamOKController:
                 logger.warning(f"Downloading directory {self.steam_apps_downloading} not found or not accessible")
                 self.downloading_folders_before_install = set()
             
-            install_button_image = os.path.join(os.path.dirname(__file__), "png/install.png")
-            reinstall_button_image = os.path.join(os.path.dirname(__file__), "png/reInstall.png")
+            install_button_image = self.steam_install_button_image
+            reinstall_button_image = self.steam_reinstall_button_image
             
             logger.debug("Searching for install/reinstall buttons...")
             install_button_location = None
@@ -342,7 +335,7 @@ class SteamOKController:
                 time.sleep(5)
 
                 logger.debug("Checking for license agreement accept button...")
-                accept_button_image = os.path.join(os.path.dirname(__file__), "png/accept.png")
+                accept_button_image = self.steam_accept_button_image
                 try:
                     accept_button_location = pg.locateOnScreen(accept_button_image, confidence=0.8)
                 except Exception as e:
@@ -479,8 +472,8 @@ class SteamOKController:
 
     def check_installation_complete(self, game_name=None):
         """持续检测安装完成状态，失败后继续检测，有超时限制"""
-        playable_image = os.path.join(os.path.dirname(__file__), "png/playable.png")
-        playable2_image = os.path.join(os.path.dirname(__file__), "png/playable2.png")
+        playable_image = self.playable_button_image
+        playable2_image = self.playable_download_icon_image
 
         # Record start time for timeout tracking
         start_time = time.time()
@@ -599,11 +592,7 @@ class SteamOKController:
     def check_and_click_not_save_button(self):
         """Check for and click the 'Not Save' button if it appears"""
         logger.info("Checking for 'Not Save' button...")
-        result = self.image_detector.check_and_click_image(
-            image_path=self.steam_ok_not_save_path,
-            max_retries=3,
-            confidence=0.8
-        )
+        result = self.image_detector.check_and_click_image(image_path=self.steamok_not_save_image)
         
         if result:
             logger.info("'Not Save' button found and clicked successfully")

@@ -10,7 +10,7 @@ import pygetwindow as gw
 # Get logger
 logger = logging.getLogger()
 
-def activate_window_by_typing(window_name, sleep_config=None):
+def activate_window_by_typing(window_name, sleep_config):
     """
     Activate a window by using the Windows search function (Win key + typing)
     
@@ -22,30 +22,22 @@ def activate_window_by_typing(window_name, sleep_config=None):
     Returns:
         True if successful, False otherwise
     """
-    # Default sleep values if none provided
-    if sleep_config is None:
-        sleep_config = {
-            'window_activate': 1,
-            'typing_delay': 0.5,
-            'app_launch': 1
-        }
-    
     try:
         # Press the Windows key to open start menu
         pg.hotkey('win')
-        time.sleep(sleep_config.get('typing_delay', 0.5))  # Wait for start menu to open
+        time.sleep(sleep_config.get('typing_delay'))  # Wait for start menu to open
         
         # Type the window name
         pg.write(window_name)
-        time.sleep(sleep_config.get('typing_delay', 0.5))  # Wait for search results
+        time.sleep(sleep_config.get('typing_delay'))  # Wait for search results
         
         # Press Enter to select and launch the application
         pg.press('enter')
-        time.sleep(sleep_config.get('typing_delay', 0.5))
+        time.sleep(sleep_config.get('typing_delay'))
         
         # Sometimes a second Enter is needed if the search result is selected but not launched
         pg.press('enter')
-        time.sleep(sleep_config.get('app_launch', 1))  # Wait for application to launch
+        time.sleep(sleep_config.get('app_launch_delay'))  # Wait for application to launch
         
         logger.info(f"{window_name} window activated using Win+Type method")
         return True
@@ -54,7 +46,7 @@ def activate_window_by_typing(window_name, sleep_config=None):
         logger.error(f"Error activating {window_name} window using Win+Type method: {str(e)}")
         return False
 
-def activate_window_by_title(window_title, sleep_config=None):
+def activate_window_by_title(window_title, sleep_config):
     """
     Activate a window by finding it based on its title and bringing it to front
     
@@ -66,12 +58,7 @@ def activate_window_by_title(window_title, sleep_config=None):
     Returns:
         True if successful, False otherwise
     """
-    # Default sleep values if none provided
-    if sleep_config is None:
-        sleep_config = {
-            'window_activate': 1,
-            'click_delay': 0.5
-        }
+
         
     try:
         windows = gw.getWindowsWithTitle(window_title)
@@ -92,15 +79,15 @@ def activate_window_by_title(window_title, sleep_config=None):
             
         # Restore the window if minimized
         target_window.restore()
-        time.sleep(sleep_config.get('window_activate', 1))
+        time.sleep(sleep_config.get('window_activate_delay'))
         
         # Activate the window
         target_window.activate()
-        time.sleep(sleep_config.get('window_activate', 1))
+        time.sleep(sleep_config.get('window_activate_delay'))
         
         # Click near the top of the window to ensure it's focused
         pg.click((target_window.left + target_window.right)//2, target_window.top + 10)
-        time.sleep(sleep_config.get('click_delay', 0.5))
+        time.sleep(sleep_config.get('click_delay'))
         
         logger.info(f"{window_title} window activated successfully")
         return True
@@ -109,7 +96,7 @@ def activate_window_by_title(window_title, sleep_config=None):
         logger.error(f"Failed to activate window {window_title}: {str(e)}")
         return False 
 
-def activate_window(window_name, sleep_config=None):
+def activate_window(window_name, sleep_config):
     """
     Activate a window using the most reliable method available.
     First tries to find and activate an existing window by title,

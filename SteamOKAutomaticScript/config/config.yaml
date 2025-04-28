@@ -15,33 +15,42 @@ paths:
   # Steam directory paths
   steam_apps_base: "F:/steam/steamapps"  # Base SteamApps directory
   
-
-
 # Image Detection
 image_detector:
   retry_interval: 2
   max_retries: 5
-  default_confidence: 0.8
+  default_confidence: 0.9
   wait_after_click: 1
 
 # Timing Configuration
 timing:
+  typing_delay: 0.5
+  app_launch_delay: 1
+  window_activate_delay: 1
+  click_delay: 0.5
+
+  installation_timeout: 10800  # 2 hours (7200 seconds) maximum for game installation
   # Delays in seconds
   window_activation_delay: 0.5
   search_input_delay: 0.5
   search_result_delay: 2.0
-  click_delay: 0.5
   installation_check_interval: 10  # How often to check if installation is complete
-  installation_timeout: 10800  # 2 hours (7200 seconds) maximum for game installation
   game_launch_timeout: 300  # 5 minutes maximum for game launch
   game_close_timeout: 60  # 1 minute maximum for game closing
   retry_delay: 5  # How long to wait between retries
 
 # Game Processing
-game_processing:
-  max_retries: 3  # Maximum number of retry attempts for game installation
-  background_check_interval: 5  # How often to check background processes
-  
+game_controller:
+  playable_button_image: "png/steam_playable_button.png"
+  playable_download_icon_image: "png/steam_playable_download_icon.png"
+  steamok_not_save_image: "png/steamok_not_save.png"
+  steanok_search_box_image: "png/steamok_search_box.png"
+  steamok_game_list_image: "png/steamok_game_list.png"
+  steamok_play_button_image: "png/steamok_play_button.png"
+  steamok_confirm_play_button_image: "png/steamok_confirm_play_button.png"
+  steam_install_button_image: "png/steam_install_button.png"
+  steam_reinstall_button_image: "png/steam_reinstall_button.png"
+  steam_accept_button_image: "png/steam_accept_button.png"
 # DLL Injection
 dll_injection:
   enabled: true  # Whether to perform DLL injection
@@ -56,18 +65,12 @@ dll_injection:
 
   # Image paths for DLL injection process
   images:
-    playable_image: "png/playable.png"
-    playable_confidence: 0.9
-    start_game_image: "png/start_game.png"
-    start_game_confidence: 0.9
-    start_game2_image: "png/start_game2.png"
-    start_game2_confidence: 0.9
-    comfirm_vr_image: "png/comfirm_vr.png"
-    comfirm_vr_confidence: 0.9
-    yunxu_image: "png/yunxu.png"
-    yunxu_confidence: 0.9
-    still_play_game_image: "png/still_play_game.png"
-    still_play_game_confidence: 0.9
+    playable_button_image: "png/steam_playable_button.png"
+    start_game_image: "png/inject_start_game.png"
+    launch_options_start_game_image: "png/inject_launch_options_start_game.png"
+    comfirm_vr_image: "png/inject_comfirm_vr.png"
+    network_allow_image: "png/inject_network_allow.png"
+    still_play_game_image: "png/inject_still_play_game.png"
   
   # Process detection
   process_detection:

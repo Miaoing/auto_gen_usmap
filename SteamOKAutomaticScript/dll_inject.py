@@ -35,20 +35,14 @@ class DLLInjector:
         # Image paths and confidence levels from config
         
         # Set up image paths with confidence levels for playable button
-        playable_image = os.path.join(os.path.dirname(__file__), dll_config['images']['playable_image'])
-        playable_confidence = dll_config['images']['playable_confidence']
+        playable_button_image = os.path.join(os.path.dirname(__file__), dll_config['images']['playable_button_image'])
         start_game_image = os.path.join(os.path.dirname(__file__), dll_config['images']['start_game_image'])
-        start_game_confidence = dll_config['images']['start_game_confidence']
-        
-        self.playable_image_paths = [
-            (playable_image, playable_confidence),
-            (start_game_image, start_game_confidence)
-        ]
+        self.playable_image_paths = [playable_button_image, start_game_image]
         
         # Set up paths for other dialog images
-        self.start_game2_path = os.path.join(os.path.dirname(__file__), dll_config['images']['start_game2_image'])
+        self.launch_options_start_game_image = os.path.join(os.path.dirname(__file__), dll_config['images']['launch_options_start_game_image'])
         self.comfirm_vr_path = os.path.join(os.path.dirname(__file__), dll_config['images']['comfirm_vr_image'])
-        self.yunxu_path = os.path.join(os.path.dirname(__file__), dll_config['images']['yunxu_image'])
+        self.network_allow = os.path.join(os.path.dirname(__file__), dll_config['images']['network_allow_image'])
         self.still_play_game_path = os.path.join(os.path.dirname(__file__), dll_config['images']['still_play_game_image'])
         
         # Load sleep configuration from config
@@ -82,18 +76,12 @@ class DLLInjector:
         Returns True if successful, False otherwise.
         """
         max_retries = self.retry_counts['playable_detection']
-        retry_interval = self.sleep_config['retry_interval']
         
         logger.info("Searching for playable button...")
         
         # Try each playable image in sequence
-        for image_path, confidence in self.playable_image_paths:
-            result = self.image_detector.check_and_click_image(
-                image_path=image_path,
-                max_retries=max_retries,
-                confidence=confidence,
-            )
-            if result:
+        for image_path in self.playable_image_paths:
+            if self.image_detector.check_and_click_image(image_path=image_path, max_retries=max_retries)
                 return True
                 
         logger.error("Failed to find playable button after trying all images")
@@ -588,10 +576,10 @@ class DLLInjector:
         
         # Define dialogs to check in order
         dialogs_to_check = [
-            {"name": "Steam launch options", "image_path": self.start_game2_path},
-            {"name": "VR launch options", "image_path": self.comfirm_vr_path},
+            {"name": "Steam launch options", "image_path": self.launch_options_start_game_image},
+            {"name": "VR launch dialog", "image_path": self.comfirm_vr_path},
             {"name": "cloud save dialog", "image_path": self.still_play_game_path},
-            {"name": "firewall permission dialog", "image_path": self.yunxu_path}
+            {"name": "firewall permission dialog", "image_path": self.network_allow_path}
         ]
         
         # Check for and handle various dialogs
