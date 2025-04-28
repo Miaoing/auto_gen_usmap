@@ -3,8 +3,8 @@
 # Paths Configuration
 paths:
   # Excel file paths
-  results_excel: "result/test_games.xlsx"
-  test_games_excel: "result/test_games.xlsx"
+  results_excel: "result/games.xlsx"
+  test_games_excel: "result/games.xlsx"
   
   # Screenshot directory
   screenshots_dir: "screenshots"
@@ -54,7 +54,7 @@ game_processing:
 # DLL Injection
 dll_injection:
   enabled: true  # Whether to perform DLL injection
-  timeout: 60  # Maximum time to wait for DLL injection in seconds
+  timeout: 300  # Maximum time to wait for DLL injection in seconds
   
   # DLL Injection specific paths
   paths:

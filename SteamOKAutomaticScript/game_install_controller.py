@@ -18,15 +18,19 @@ from config.config_loader import get_config
 
 logger = logging.getLogger()
 
+# Global variable for screenshot manager - DEPRECATED
+# This will be set by main.py when calling process_game
+# Now using self.screenshot_mgr inside the SteamOKController class instead
 
 class SteamOKController:
-    def __init__(self, excel_path='result/games.xlsx'):
+    def __init__(self, excel_path='result/games.xlsx', screenshot_mgr=None):
         self.results = {}  # 存储游戏检查结果
         self.current_game_index = 0  # 当前处理的游戏索引
         self.error_messages = {}  # 存储游戏安装失败的错误信息
         self.excel_path = excel_path  # Excel文件路径
         self.confirm_quit_path = os.path.join(os.path.dirname(__file__), "png/confirm_quit.png")
         self.license_handler = LicenseAgreementHandler()  # 创建许可协议处理器实例
+        self.screenshot_mgr = screenshot_mgr  # Store screenshot manager as instance variable
         
         # Load configuration
         self.config = get_config()
@@ -49,6 +53,10 @@ class SteamOKController:
         logger.info(f"Installation timeout set to {self.installation_timeout} seconds ({self.installation_timeout/60:.1f} minutes)")
         
         logger.info(f"SteamOKController initialized with excel_path: {excel_path}")
+        if self.screenshot_mgr:
+            logger.info("Screenshot manager is configured and ready")
+        else:
+            logger.info("No screenshot manager provided, using fallback screenshot methods")
 
     def _format_game_name(self, game_name):
         """格式化游戏名称，只保留中文和英文字母字符"""
@@ -126,35 +134,43 @@ class SteamOKController:
                 pg.press('enter')  # 模拟按下回车键
                 time.sleep(2)  # 等待2秒，确保搜索动作完成
                 
-                # 获取并保存搜索结果的截图
-                windows = gw.getWindowsWithTitle("SteamOK")
-                if not windows:
-                    logger.error("SteamOK window not found")
-                    return False
+                # Take debug screenshot with new manager if available
+                if self.screenshot_mgr:
+                    self.screenshot_mgr.take_screenshot(game_name, "search_results", min_interval_seconds=0)
+                else:
+                    # Original screenshot code - kept for backward compatibility
+                    windows = gw.getWindowsWithTitle("SteamOK")
+                    if not windows:
+                        logger.error("SteamOK window not found")
+                        return False
 
-                window = None
-                for w in windows:
-                    if w.title == "SteamOK":  # 精确匹配标题
-                        window = w
-                        break
+                    window = None
+                    for w in windows:
+                        if w.title == "SteamOK":  # 精确匹配标题
+                            window = w
+                            break
 
-                if not window:
-                    logger.error("No window with exact 'SteamOK' title found")
-                    return False
+                    if not window:
+                        logger.error("No window with exact 'SteamOK' title found")
+                        return False
 
-                screenshot = pg.screenshot(region=(window.left, window.top, window.width, window.height))
-                formatted_name = self._format_game_name(game_name)
-                game_dir = f"screenshots/{formatted_name}"
-                os.makedirs(game_dir, exist_ok=True)
-                screenshot_path = f"{game_dir}/search.png"
-                screenshot.save(screenshot_path)
-                logger.info(f"Search screenshot saved to: {screenshot_path}")
+                    screenshot = pg.screenshot(region=(window.left, window.top, window.width, window.height))
+                    formatted_name = self._format_game_name(game_name)
+                    game_dir = f"screenshots/{formatted_name}"
+                    os.makedirs(game_dir, exist_ok=True)
+                    screenshot_path = f"{game_dir}/search.png"
+                    screenshot.save(screenshot_path)
+                    logger.info(f"Search screenshot saved to: {screenshot_path}")
                 
                 return True
             else:
                 logger.error("Search box not found via image")
-                screenshot = pg.screenshot()
-                screenshot.save("debug_search_box_not_found.png")
+                # Take debug screenshot even when search box not found
+                if self.screenshot_mgr:
+                    self.screenshot_mgr.take_screenshot(game_name, "search_box_not_found", min_interval_seconds=0)
+                else:
+                    screenshot = pg.screenshot()
+                    screenshot.save("debug_search_box_not_found.png")
                 return False
 
         except Exception as e:
@@ -198,45 +214,20 @@ class SteamOKController:
                 header_x, header_y = header_location
                 # 点击表头下方的位置，假设第一个游戏就位于下方
                 first_game_y = header_y + 50  # 调整偏移量，使得点击下方的第一个游戏
-                pg.click(header_x, first_game_y)
-                time.sleep(0.5)
+                pg.click(header_x, first_game_y)  # 点击第一个游戏
+                logger.info(f"Clicked first result for game: {game_name}")
+                time.sleep(1)  # 等待游戏详情页加载
                 
-                # 获取并保存点击后的截图
-                windows = gw.getWindowsWithTitle("SteamOK")
-                if not windows:
-                    logger.error("SteamOK window not found")
-                    return False
-
-                window = None
-                for w in windows:
-                    if w.title == "SteamOK":  # 精确匹配标题
-                        window = w
-                        break
-                if not window:
-                    logger.error("No window with exact 'SteamOK' title found")
-                    return False
-                # 获取并保存点击后的截图
-                screenshot = pg.screenshot(region=(window.left, window.top, window.width, window.height))
-                formatted_name = self._format_game_name(game_name)
-                game_dir = f"screenshots/{formatted_name}"
-                os.makedirs(game_dir, exist_ok=True)
-                screenshot_path = f"{game_dir}/detail.png"
-                screenshot.save(screenshot_path)
-                
-                # 更新Excel文件
-                try:
-                    df = pd.read_excel(self.excel_path)
-                    df.iloc[self.current_game_index, 2] = screenshot_path
-                    df.to_excel(self.excel_path, index=False)
-                except Exception as e:
-                    logger.error(f"Error updating Excel with detail screenshot: {e}")
+                # Take debug screenshot 
+                if self.screenshot_mgr:
+                    self.screenshot_mgr.take_screenshot(game_name, "game_details", min_interval_seconds=0)
                 
                 return True
             else:
-                logger.error("Game list header not found")
+                logger.error(f"Failed to find game list header for game: {game_name}")
                 return False
         except Exception as e:
-            logger.error(f"Error clicking first result: {e}")
+            logger.error(f"Error clicking first result: {str(e)}", exc_info=True)
             return False
 
     def check_play_button(self):
@@ -424,7 +415,7 @@ class SteamOKController:
             logger.error(f"Error minimizing game window: {e}")
             return False
 
-    def check_installation_complete(self):
+    def check_installation_complete(self, game_name=None):
         """持续检测安装完成状态，失败后继续检测，有超时限制"""
         playable_image = os.path.join(os.path.dirname(__file__), "png/playable.png")
         playable2_image = os.path.join(os.path.dirname(__file__), "png/playable2.png")
@@ -511,6 +502,10 @@ class SteamOKController:
                     if current_progress != last_progress_update:
                         logger.info(current_progress)
                         last_progress_update = current_progress
+                        
+                        # Take an occasional progress screenshot
+                        if self.screenshot_mgr and game_name and (progress_percent % 20 == 0):
+                            self.screenshot_mgr.take_screenshot(game_name, f"progress_{progress_percent}pct", min_interval_seconds=1200)
                 
                 time.sleep(10)
 
@@ -578,6 +573,10 @@ class SteamOKController:
                 self._handle_game_error(game_name, error_msg)
                 return False
 
+            # Take screenshot right after confirming game start
+            if self.screenshot_mgr:
+                self.screenshot_mgr.take_screenshot(game_name, "after_start_game", min_interval_seconds=0)
+
             logger.info("Waiting 40 seconds for game startup...")
             for _ in tqdm(range(40), desc="Waiting for game startup"):
                 time.sleep(1)
@@ -604,7 +603,12 @@ class SteamOKController:
                     logger.warning("Failed to minimize SteamOK window")
                 elif self.click_install_button():
                     logger.info("Successfully clicked install button")
-                    if self.check_installation_complete():
+                    
+                    # Take screenshot after clicking install
+                    if self.screenshot_mgr:
+                        self.screenshot_mgr.take_screenshot(game_name, "after_install_click", min_interval_seconds=0)
+                        
+                    if self.check_installation_complete(game_name):
                         logger.info("Game installation completed successfully")
                         success = True
                         break
