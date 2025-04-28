@@ -4,12 +4,18 @@ import time
 import logging
 import pandas as pd
 from game_install_controller import SteamOKController
+from config import get_config
 
 logger = logging.getLogger()
 
 class GamePacker:
     def __init__(self):
-        self.steam_common_path = "F:\\steam\\steamapps\\common"
+        # Load configuration
+        self.config = get_config()
+        
+        # Get Steam apps base path from config
+        self.steam_apps_base = self.config.get('paths').get('steam_apps_base')
+        self.steam_common_path = os.path.join(self.steam_apps_base, 'common')
         self.controller = SteamOKController()
 
     def get_latest_game_folder(self):

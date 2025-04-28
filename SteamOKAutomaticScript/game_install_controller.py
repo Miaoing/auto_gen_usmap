@@ -23,7 +23,7 @@ logger = logging.getLogger()
 # Now using self.screenshot_mgr inside the SteamOKController class instead
 
 class SteamOKController:
-    def __init__(self, excel_path='result/games.xlsx', screenshot_mgr=None):
+    def __init__(self, excel_path, screenshot_mgr):
         self.results = {}  # 存储游戏检查结果
         self.current_game_index = 0  # 当前处理的游戏索引
         self.error_messages = {}  # 存储游戏安装失败的错误信息
@@ -35,10 +35,10 @@ class SteamOKController:
         # Load configuration
         self.config = get_config()
         
-        # Get Steam apps path from config and derive downloading folder
-        self.steam_apps_common = self.config.get('paths', {}).get('steam_apps_common')
-        # Get the base steamapps folder by removing '/common' from the end
-        self.steam_apps_base = os.path.dirname(self.steam_apps_common)
+        # Get Steam apps paths from config
+        self.steam_apps_base = self.config.get('paths').get('steam_apps_base')
+        # Create the path to common folder
+        self.steam_apps_common = os.path.join(self.steam_apps_base, 'common')
         # Create the path to the downloading folder
         self.steam_apps_downloading = os.path.join(self.steam_apps_base, 'downloading')
         

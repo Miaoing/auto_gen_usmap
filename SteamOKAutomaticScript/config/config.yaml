@@ -12,8 +12,8 @@ paths:
   # Logs configuration
   logs_dir: "logs"
   
-  # Steam installation directory (for DLL injection)
-  steam_apps_common: "F:/steam/steamapps/common"
+  # Steam directory paths
+  steam_apps_base: "F:/steam/steamapps"  # Base SteamApps directory
   
   # DLL injector executable path
   dll_injector_path: "E:/DLL Injector.lnk"
