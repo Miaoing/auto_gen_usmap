@@ -13,7 +13,7 @@ from openpyxl.drawing.image import Image
 from license_agreement_handler import LicenseAgreementHandler
 from tqdm import tqdm
 from image_utils import ImageDetector
-from window_utils import activate_window_by_typing
+from window_utils import activate_window_by_typing, activate_window_by_title
 from config.config_loader import get_config
 
 logger = logging.getLogger()
@@ -67,32 +67,13 @@ class SteamOKController:
     def activate_steamok_window(self):
         """激活SteamOK窗口并确保它处于最前面"""
         try:
-            # Press Win + D to show desktop first
-            # pg.hotkey('win', 'd')
-            # time.sleep(0.5)
+            # Try to activate SteamOK using the window_utils module
+            return activate_window_by_title("SteamOK", self.config.get('timing', {}))
             
-            windows = gw.getWindowsWithTitle("SteamOK")
-            if not windows:
-                logger.error("SteamOK window not found")
-                return False
-
-            for window in windows:
-                if window.title == "SteamOK":
-                    logger.debug(f"Found SteamOK window: {window.title}")
-                    window.restore()
-                    time.sleep(0.3)
-                    window.activate()
-                    time.sleep(0.3)
-
-                    pg.click(window.left + 10, window.top + 10)
-                    logger.info("SteamOK window activated successfully")
-                    return True
-
-            logger.error("No window with exact 'SteamOK' title found")
-            return False
         except Exception as e:
-            logger.error(f"Failed to activate SteamOK window: {str(e)}")
-            return False
+            logger.error(f"Failed to activate SteamOK window with window_utils: {str(e)}")
+            # Fall back to the typing method if the above fails
+            return activate_window_by_typing("SteamOK", self.config.get('timing', {}))
 
     def search_game(self, game_name):
         try:
