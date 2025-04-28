@@ -87,8 +87,8 @@ class DLLInjector:
         for image_path, confidence in self.playable_image_paths:
             result = self.image_detector.check_and_click_image(
                 image_path=image_path,
-                confidence=confidence,
                 max_retries=max_retries,
+                confidence=confidence,
             )
             if result:
                 return True
