@@ -26,10 +26,13 @@ class DLLInjector:
         # Initialize parameters from config
         self.steam_apps_base = self.config.get('paths').get('steam_apps_base')
         self.game_folder = os.path.join(self.steam_apps_base, 'common')
-        self.dll_injector_path = self.config['paths']['dll_injector_path']
+
+        # Get DLL injector configuration
+        dll_config = self.config['dll_injection']
+
+        self.dll_injector_path = dll_config['dll_injector_path']
         
         # Image paths and confidence levels from config
-        dll_config = self.config['dll_injection']
         
         # Set up image paths with confidence levels for playable button
         playable_image = os.path.join(os.path.dirname(__file__), dll_config['images']['playable_image'])

@@ -15,8 +15,7 @@ paths:
   # Steam directory paths
   steam_apps_base: "F:/steam/steamapps"  # Base SteamApps directory
   
-  # DLL injector executable path
-  dll_injector_path: "E:/DLL Injector.lnk"
+
 
 # Image Detection
 image_detector:
@@ -52,7 +51,9 @@ dll_injection:
   paths:
     # Path to base log directory for injection logs
     log_directory: "C:/Dumper-7/log"
-  
+    # DLL injector executable path
+    dll_injector_path: "E:/DLL Injector.lnk"
+
   # Image paths for DLL injection process
   images:
     playable_image: "png/playable.png"
