@@ -1,7 +1,6 @@
 pyautogui>=0.9.54
-cnocr>=2.2.2
 pillow>=9.0.0  # Required by pyautogui for screenshots
-numpy>=1.21.0  # Required by cnocr 
+numpy>=1.21.0  # Required for numerical operations
 psutil>=5.9.0  # Required for process detection
 pygetwindow>=0.0.9  # Required for window management 
 pyyaml>=6.0.0  # Required for configuration support

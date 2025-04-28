@@ -7,7 +7,6 @@ from datetime import datetime
 import pyautogui as pg
 from logger import setup_logging
 from game_install_controller import SteamOKController
-from ocr_helper import OcrHelper
 from dll_inject import DLLInjector
 from config import load_config, get_config
 from csv_logger import GameStatusLogger
@@ -146,10 +145,6 @@ def main():
     try:
         logger.info("脚本启动中...")
         
-        # Initialize OCR if enabled in config
-        if config['ocr']['enabled']:
-            OcrHelper.initialize()
-
         # Initialize the game controller with the Excel path from config
         controller = SteamOKController(excel_path=config['paths']['results_excel'], screenshot_mgr=screenshot_mgr)
         # Note: Game installation timeout can be configured in config.yaml under timing.installation_timeout
