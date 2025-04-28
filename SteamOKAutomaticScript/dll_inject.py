@@ -11,7 +11,7 @@ import glob
 from config import get_config, load_config
 from tqdm import tqdm
 from image_utils import ImageDetector
-from window_utils import activate_window_by_title, activate_window_by_typing
+from window_utils import activate_window_by_title, activate_window_by_typing, activate_window
 
 # Disable PyAutoGUI fail-safe (not recommended for safety reasons)
 pg.FAILSAFE = False
@@ -70,14 +70,7 @@ class DLLInjector:
         
     def activate_steam_window(self):
         """Activate Steam window and bring it to the front"""
-        try:
-            # Try to activate Steam using the window_utils module
-            return activate_window_by_title("Steam", self.sleep_config)
-            
-        except Exception as e:
-            logger.error(f"Failed to activate Steam window with window_utils: {str(e)}")
-            # Fall back to the typing method if the above fails
-            return activate_window_by_typing("Steam", self.sleep_config)
+        return activate_window("Steam", self.sleep_config)
         
     def detect_and_click_playable(self):
         """

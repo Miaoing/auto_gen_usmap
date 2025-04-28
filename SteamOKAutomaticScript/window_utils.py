@@ -108,3 +108,37 @@ def activate_window_by_title(window_title, sleep_config=None):
     except Exception as e:
         logger.error(f"Failed to activate window {window_title}: {str(e)}")
         return False 
+
+def activate_window(window_name, sleep_config=None):
+    """
+    Activate a window using the most reliable method available.
+    First tries to find and activate an existing window by title,
+    if that fails, falls back to the typing method.
+    
+    Args:
+        window_name: The name of the window/application to activate
+        sleep_config: Optional dictionary with sleep configuration values.
+                     If None, default values will be used.
+                     
+    Returns:
+        True if activation was successful by any method, False otherwise
+    """
+    logger.info(f"Attempting to activate {window_name} window...")
+    
+    try:
+        # First try to activate by title (faster if window exists)
+        if activate_window_by_title(window_name, sleep_config):
+            logger.info(f"Successfully activated {window_name} window by title")
+            return True
+    except Exception as e:
+        logger.warning(f"Failed to activate {window_name} window by title: {str(e)}")
+    
+    # If activation by title failed, try the typing method
+    logger.info(f"Falling back to typing method for {window_name}")
+    if activate_window_by_typing(window_name, sleep_config):
+        logger.info(f"Successfully activated {window_name} window by typing")
+        return True
+    
+    # If both methods failed
+    logger.error(f"Failed to activate {window_name} window by any method")
+    return False 

@@ -13,7 +13,7 @@ from openpyxl.drawing.image import Image
 from license_agreement_handler import LicenseAgreementHandler
 from tqdm import tqdm
 from image_utils import ImageDetector
-from window_utils import activate_window_by_typing, activate_window_by_title
+from window_utils import activate_window_by_typing, activate_window_by_title, activate_window
 from config.config_loader import get_config
 
 logger = logging.getLogger()
@@ -66,14 +66,11 @@ class SteamOKController:
 
     def activate_steamok_window(self):
         """激活SteamOK窗口并确保它处于最前面"""
-        try:
-            # Try to activate SteamOK using the window_utils module
-            return activate_window_by_title("SteamOK", self.config.get('timing', {}))
-            
-        except Exception as e:
-            logger.error(f"Failed to activate SteamOK window with window_utils: {str(e)}")
-            # Fall back to the typing method if the above fails
-            return activate_window_by_typing("SteamOK", self.config.get('timing', {}))
+        return activate_window("SteamOK", self.config.get('timing', {}))
+
+    def activate_steam_window(self):
+        """激活Steam窗口并确保它处于最前面"""
+        return activate_window("Steam", self.config.get('timing', {}))
 
     def search_game(self, game_name):
         try:
@@ -352,10 +349,6 @@ class SteamOKController:
         except Exception as e:
             logger.error(f"Error during install button click process: {str(e)}", exc_info=True)
             return False
-
-    def activate_steam_window(self):
-        """激活Steam窗口并确保它处于最前面"""
-        return activate_window_by_typing("Steam")
 
     def move_steamok_to_background(self):
         """将SteamOK窗口移到后台"""
