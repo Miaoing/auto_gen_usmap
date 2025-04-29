@@ -13,7 +13,7 @@ class GameStatusLogger:
     
     This logger tracks:
     - Game name
-    - Status (DOWNLOAD_ERROR, DOWNLOAD_SUCCESS, INJECTION_CRASH, INJECTION_SUCCESS, INJECTION_TIMEOUT)
+    - Status (DOWNLOAD_ERROR, DOWNLOAD_SUCCESS, INJECTION_CRASH, INJECTION_SUCCESS, INJECTION_TIMEOUT, CANCELLED)
     - USMap path (if successful)
     - Injection log directory (if applicable)
     - Timestamp
@@ -87,6 +87,26 @@ class GameStatusLogger:
         except requests.exceptions.RequestException as e:
             logger.error(f"Error sending webhook notification: {e}")
     
+    def get_status_emoji(self, status):
+        """
+        Get an appropriate emoji for the status.
+        
+        Args:
+            status (str): The status to get an emoji for
+        
+        Returns:
+            str: An emoji representing the status
+        """
+        status_emojis = {
+            "DOWNLOAD_ERROR": "❌",
+            "DOWNLOAD_SUCCESS": "⬇️",
+            "INJECTION_CRASH": "💥",
+            "INJECTION_SUCCESS": "✅",
+            "INJECTION_TIMEOUT": "⏱️",
+            "CANCELLED": "⚠️"
+        }
+        return status_emojis.get(status, "🔄")
+    
     def log_game_status(self, game_name, status, usmap_path=None, injection_log_dir=None, error_details=None):
         """
         Log the game status to the CSV file.
@@ -94,7 +114,7 @@ class GameStatusLogger:
         Args:
             game_name (str): Name of the game
             status (str): Status of the game process (DOWNLOAD_ERROR, DOWNLOAD_SUCCESS, 
-                         INJECTION_CRASH, INJECTION_SUCCESS, INJECTION_TIMEOUT)
+                         INJECTION_CRASH, INJECTION_SUCCESS, INJECTION_TIMEOUT, CANCELLED)
             usmap_path (str, optional): Path to the USMap file if injection was successful
             injection_log_dir (str, optional): Path to the injection log directory
             error_details (str, optional): Error details if an error occurred
@@ -116,20 +136,24 @@ class GameStatusLogger:
         
         # Send webhook notification if enabled
         if self.webhook_url:
-            # Construct a complete message with all fields
-            message = f"[{timestamp}] Game: {game_name} - Status: {status}"
+            # Get emoji for status
+            status_emoji = self.get_status_emoji(status)
+            
+            # Construct a message header with emoji
+            message = f"🎮 {game_name} | {status_emoji} {status}\n⏰ {timestamp}"
             
             # Add USMap path if present
             if usmap_path:
-                message += f"\nUSMap path: {usmap_path}"
+                message += f"\n📁 USMap path: {usmap_path}"
             
             # Add Injection log directory if present
             if injection_log_dir:
-                message += f"\nInjection log directory: {injection_log_dir}"
+                message += f"\n📂 Log directory: {injection_log_dir}"
             
             # Add Error details if present
             if error_details:
-                message += f"\nError details: {error_details}"
+                message += f"\n⚠️ Error details: {error_details}"
+                
                 
             self.send_webhook_notification(message)
     
@@ -146,6 +170,20 @@ class GameStatusLogger:
         self.log_game_status(
             game_name=game_name,
             status="DOWNLOAD_SUCCESS"
+        )
+    
+    def log_cancelled(self, game_name, reason=None):
+        """
+        Log a cancelled game process (e.g., due to EasyAntiCheat detection).
+        
+        Args:
+            game_name (str): Name of the game
+            reason (str, optional): Reason for cancellation
+        """
+        self.log_game_status(
+            game_name=game_name,
+            status="CANCELLED",
+            error_details=reason
         )
     
     def log_injection_crash(self, game_name, error_details=None, injection_log_dir=None):

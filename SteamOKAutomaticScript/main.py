@@ -21,6 +21,7 @@ def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='SteamOK Automatic Script')
     parser.add_argument('--config', help='Path to custom configuration file')
+    parser.add_argument('--webhook_url', help='URL for webhook notifications')
     args = parser.parse_args()
     
     # If custom config is provided, reload configuration
@@ -30,8 +31,11 @@ def main():
         logger.info(f"Using custom configuration file: {args.config}")
     
     # Initialize the CSV logger
-    csv_logger = GameStatusLogger()
+    webhook_url = args.webhook_url
+    csv_logger = GameStatusLogger(webhook_url=webhook_url)
     logger.info(f"CSV logging enabled to: {csv_logger.get_csv_path()}")
+    if webhook_url:
+        logger.info(f"Webhook notifications enabled with URL: {webhook_url}")
     
     # Initialize the debug screenshot manager
     screenshot_mgr = DebugScreenshotManager()
@@ -74,7 +78,7 @@ def main():
                     if error_type == "easyanticheat_detected":
                         # Handle EasyAntiCheat detection as a special case
                         logger.warning(f"Game {game} has EasyAntiCheat: {error_data}")
-                        csv_logger.log_download_error(game, f"EasyAntiCheat detected: {error_data}")
+                        csv_logger.log_cancelled(game, f"EasyAntiCheat detected: {error_data}")
                         print(f"{game}: ⚠️ 含有反作弊系统 (EasyAntiCheat)")
                     else:
                         # Handle other download failures
