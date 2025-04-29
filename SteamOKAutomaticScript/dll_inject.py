@@ -628,33 +628,62 @@ if __name__ == "__main__":
         logger.info(f"Loading custom configuration from: {config_path}")
         config = load_config(config_path)
 
+    # Initialize CSV logger for debug testing
+    from csv_logger import GameStatusLogger
+    csv_logger = GameStatusLogger(webhook_url="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=41d709ab-4cbd-43bd-99a8-0be822b7584a")
+    logger.info(f"CSV logging enabled for debug testing to: {csv_logger.get_csv_path()}")
+    
     # Create and run injector
     logger.info("Starting DLL injection process")
     injector = DLLInjector()
     
-    max_retries = 5
+    max_retries = 10
     result = None
+    
+    # Use a dummy game name for testing when run directly
+    test_game_name = "TestGame"
     
     while max_retries > 0:
         result = injector.run_injection_process()
-        if result["success"]:
-            break
-        max_retries -= 1
-        logger.info(f"Retry attempt {5 - max_retries} of 5")
+        logger.info(f"Retry attempt max_retries: {max_retries}")
     
-    if result:
-        if result["success"]:
-            success_msg = "DLL injection successful"
-            if result["data"]:  # If USMap path is available
-                success_msg += f", USMap generated at: {result['data']}"
-            logger.info(success_msg)
-            print(success_msg)
+        if result:
+            if result["success"]:
+                success_msg = "DLL injection successful"
+                usmap_path = result["data"]
+                if usmap_path:  # If USMap path is available
+                    success_msg += f", USMap generated at: {usmap_path}"
+                    # Log successful injection with USMap path
+                    csv_logger.log_injection_success(test_game_name, usmap_path, injector.latest_log_dir)
+                else:
+                    # Log successful injection without USMap path
+                    csv_logger.log_injection_success(test_game_name, "No USMap path found", injector.latest_log_dir)
+                logger.info(success_msg)
+                print(success_msg)
+                break
+                max_retries -= 1
+
+            else:
+                error_type = result["error_type"]
+                error_data = result["data"] if result["data"] else "Unknown error"
+                error_msg = f"DLL injection failed: {error_type}"
+                if error_data:  # If there's additional error data
+                    error_msg += f" - {error_data}"
+                    
+                # Log different failure types appropriately
+                if error_type == "timeout":
+                    csv_logger.log_injection_timeout(test_game_name, injector.latest_log_dir)
+                elif error_type == "game_crashed":
+                    csv_logger.log_injection_crash(test_game_name, "Game process crashed", injector.latest_log_dir)
+                else:
+                    csv_logger.log_injection_crash(test_game_name, f"Injection failed: {error_type} - {error_data}", injector.latest_log_dir)
+                    
+                logger.error(error_msg)
+                print(error_msg)
         else:
-            error_msg = f"DLL injection failed: {result['error_type']}"
-            if result["data"]:  # If there's additional error data
-                error_msg += f" - {result['data']}"
+            error_msg = "DLL injection failed: no result returned"
+            csv_logger.log_injection_crash(test_game_name, error_msg)
             logger.error(error_msg)
             print(error_msg)
-    else:
-        logger.error("No result returned from injection process")
-        print("DLL injection failed: no result returned")
+    
+    print(f"Debug results saved to CSV: {csv_logger.get_csv_path()}")
