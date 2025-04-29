@@ -472,7 +472,13 @@ class SteamOKController:
             return False, None
 
     def check_installation_complete(self, game_name=None):
-        """持续检测安装完成状态，失败后继续检测，有超时限制"""
+        """
+        持续检测安装完成状态，失败后继续检测，有超时限制
+        Returns:
+            - True: Installation completed successfully
+            - False: Installation timed out
+            - "easyanticheat": EasyAntiCheat was detected
+        """
         playable_image = self.playable_button_image
         playable2_image = self.playable_download_icon_image
 
@@ -515,7 +521,8 @@ class SteamOKController:
                         if self.screenshot_mgr:
                             self.screenshot_mgr.take_screenshot(game_name, "easyanticheat_abort", min_interval_seconds=0)
                             
-                        return False
+                        # Return a special value to indicate EasyAntiCheat detection
+                        return "easyanticheat"
                     last_eac_check = check_count
                 
                 if not self.activate_steam_window():
@@ -614,7 +621,13 @@ class SteamOKController:
         return result
 
     def process_game(self, game_name):
-        """处理单个游戏的完整流程"""
+        """
+        处理单个游戏的完整流程
+        Returns a dictionary with:
+            - "success": True if successful, False if failed
+            - "error_type": Error type if failed, None if successful
+            - "data": Additional data if any, None otherwise
+        """
         try:
             logger.info(f"Starting game processing: {game_name}")
             
@@ -625,7 +638,7 @@ class SteamOKController:
                 error_msg = "Failed to activate SteamOK window"
                 logger.error(f"{error_msg} for game: {game_name}")
                 self._handle_game_error(game_name, error_msg)
-                return False
+                return {"success": False, "error_type": "steamok_window_activation_failed", "data": error_msg}
             
             # Check for and click "Not Save" button if it appears
             if self.check_and_click_not_save_button():
@@ -635,25 +648,25 @@ class SteamOKController:
                 error_msg = "Failed to search game"
                 logger.error(f"{error_msg}: {game_name}")
                 self._handle_game_error(game_name, error_msg)
-                return False
+                return {"success": False, "error_type": "search_failed", "data": error_msg}
 
             if not self.click_first_result(game_name):
                 error_msg = "Failed to click first result"
                 logger.error(f"{error_msg} for game: {game_name}")
                 self._handle_game_error(game_name, error_msg)
-                return False
+                return {"success": False, "error_type": "first_result_click_failed", "data": error_msg}
 
             if not self.check_play_button():
                 error_msg = "Failed to click play button"
                 logger.error(f"{error_msg} for game: {game_name}")
                 self._handle_game_error(game_name, error_msg)
-                return False
+                return {"success": False, "error_type": "play_button_click_failed", "data": error_msg}
 
             if not self.confirm_start_game():
                 error_msg = "Failed to click confirmation button"
                 logger.error(f"{error_msg} for game: {game_name}")
                 self._handle_game_error(game_name, error_msg)
-                return False
+                return {"success": False, "error_type": "confirmation_button_click_failed", "data": error_msg}
 
             # Check for and click "Not Use Save" button if it appears
             if self.check_and_click_not_use_save_button():
@@ -694,16 +707,23 @@ class SteamOKController:
                     if self.screenshot_mgr:
                         self.screenshot_mgr.take_screenshot(game_name, "after_install_click", min_interval_seconds=0)
                         
-                    if self.check_installation_complete(game_name):
+                    installation_result = self.check_installation_complete(game_name)
+                    if installation_result is True:
                         logger.info("Game installation completed successfully")
                         success = True
                         break
+                    elif installation_result == "easyanticheat":
+                        # EasyAntiCheat detection requires special handling
+                        error_msg = "EasyAntiCheat detected in game files"
+                        logger.warning(f"🛑 {error_msg}")
+                        # Error already handled by check_installation_complete
+                        return {"success": False, "error_type": "easyanticheat_detected", "data": error_msg}
                     else:
                         timeout_minutes = self.installation_timeout / 60
                         error_msg = f"Installation timeout after {timeout_minutes:.1f} minutes"
                         logger.error(error_msg)
                         self._handle_game_error(game_name, error_msg)
-                        return False
+                        return {"success": False, "error_type": "installation_timeout", "data": error_msg}
                 
                 time.sleep(5)
 
@@ -711,17 +731,18 @@ class SteamOKController:
                 error_msg = "Timeout: Failed to complete installation after 10 attempts"
                 logger.error(error_msg)
                 self._handle_game_error(game_name, error_msg)
-                return False
+                return {"success": False, "error_type": "max_attempts_reached", "data": error_msg}
 
             self.results[game_name] = True
             self._save_game_result(game_name, True)
             logger.info(f"Successfully processed game: {game_name}")
-            return True
+            return {"success": True, "error_type": None, "data": None}
 
         except Exception as e:
-            logger.error(f"Error processing game {game_name}: {str(e)}", exc_info=True)
+            error_msg = f"Error processing game {game_name}: {str(e)}"
+            logger.error(error_msg, exc_info=True)
             self._handle_game_error(game_name, str(e))
-            return False
+            return {"success": False, "error_type": "exception", "data": str(e)}
 
     def _handle_game_error(self, game_name, error_msg):
         """Handle game processing errors consistently"""
@@ -746,7 +767,7 @@ class SteamOKController:
             
             if game_index:
                 # Update availability status (column 2)
-                df.iloc[game_index[0], 2] = "是" if available else "否"
+                df.iloc[game_index[0], 2] = str("是" if available else "否")  # Cast to string to avoid dtype warning
                 
                 # If not available, update error message column
                 if not available and error_msg:

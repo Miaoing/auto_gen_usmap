@@ -100,14 +100,31 @@ class CSVWatcher:
                 # Read any new lines
                 reader = csv.reader(f)
                 for row in reader:
+                    if len(row) < 6:  # Make sure we have enough columns
+                        print(f"Warning: Row has fewer than expected columns: {row}")
+                        continue
+                        
                     game_name = row[0]
                     status = row[1]
                     timestamp = row[2]
                     usmap_path = row[3]
+                    injection_log_dir = row[4]
+                    error_details = row[5]
                     
+                    # Construct a complete message with all fields
                     message = f"[{timestamp}] Game: {game_name} - Status: {status}"
-                    if status == "INJECTION_SUCCESS" and usmap_path:
+                    
+                    # Add USMap path if present
+                    if usmap_path and usmap_path.strip():
                         message += f"\nUSMap path: {usmap_path}"
+                    
+                    # Add Injection log directory if present
+                    if injection_log_dir and injection_log_dir.strip():
+                        message += f"\nInjection log directory: {injection_log_dir}"
+                    
+                    # Add Error details if present
+                    if error_details and error_details.strip():
+                        message += f"\nError details: {error_details}"
                         
                     self.send_message(message)
                     print(f"New entry processed: {game_name} - {status}")

@@ -3,8 +3,8 @@
 # Paths Configuration
 paths:
   # Excel file paths
-  results_excel: "result/test_games.xlsx"
-  test_games_excel: "result/test_games.xlsx"
+  results_excel: "result/games.xlsx"
+  test_games_excel: "result/games.xlsx"
   
   # Screenshot directory
   screenshots_dir: "screenshots"
@@ -18,7 +18,7 @@ paths:
 # Image Detection
 image_detector:
   retry_interval: 2
-  max_retries: 5
+  max_retries: 3
   default_confidence: 0.9
   wait_after_click: 1
 
@@ -105,7 +105,6 @@ dll_injection:
   
   # Retry counts for injection steps
   retry_counts:
-    playable_detection: 10     # Max retries for detecting playable button
     launch_options: 5          # Max retries for detecting Steam launch options
     firewall_permission: 5     # Max retries for detecting firewall permissions
     cloud_save: 5              # Max retries for detecting cloud save dialog

@@ -93,7 +93,7 @@ def activate_window_by_title(window_title, sleep_config):
         return True
         
     except Exception as e:
-        logger.error(f"Failed to activate window {window_title}: {str(e)}")
+        logger.error(f"Failed to activate window by title - {window_title}: {str(e)}")
         return False 
 
 def activate_window(window_name, sleep_config):
@@ -111,7 +111,6 @@ def activate_window(window_name, sleep_config):
         True if activation was successful by any method, False otherwise
     """
     logger.info(f"Attempting to activate {window_name} window...")
-    
     try:
         # First try to activate by title (faster if window exists)
         if activate_window_by_title(window_name, sleep_config):

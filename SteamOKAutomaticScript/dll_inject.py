@@ -42,7 +42,7 @@ class DLLInjector:
         # Set up paths for other dialog images
         self.launch_options_start_game_image = os.path.join(os.path.dirname(__file__), dll_config['images']['launch_options_start_game_image'])
         self.comfirm_vr_path = os.path.join(os.path.dirname(__file__), dll_config['images']['comfirm_vr_image'])
-        self.network_allow = os.path.join(os.path.dirname(__file__), dll_config['images']['network_allow_image'])
+        self.network_allow_path = os.path.join(os.path.dirname(__file__), dll_config['images']['network_allow_image'])
         self.still_play_game_path = os.path.join(os.path.dirname(__file__), dll_config['images']['still_play_game_image'])
         
         # Load sleep configuration from config
@@ -68,20 +68,18 @@ class DLLInjector:
         
     def activate_steam_window(self):
         """Activate Steam window and bring it to the front"""
-        return activate_window("Steam", self.sleep_config)
+        return activate_window("Steam", self.config['timing'])
         
     def detect_and_click_playable(self):
         """
         Detect the 'playable.png' image on screen and click it.
         Returns True if successful, False otherwise.
         """
-        max_retries = self.retry_counts['playable_detection']
-        
         logger.info("Searching for playable button...")
         
         # Try each playable image in sequence
         for image_path in self.playable_image_paths:
-            if self.image_detector.check_and_click_image(image_path=image_path, max_retries=max_retries):
+            if self.image_detector.check_and_click_image(image_path=image_path):
                 return True
                 
         logger.error("Failed to find playable button after trying all images")
@@ -443,7 +441,10 @@ class DLLInjector:
     def inject_dll(self, pid):
         """
         Inject DLL by directly interacting with DLL Injector GUI
-        Returns True if successful, False if failed, or the USMap path if injection succeeded
+        Returns a dictionary with:
+            - "success": True if successful, False if failed
+            - "error_type": Error type if failed, None if successful
+            - "data": USMap path if generated, None otherwise
         """
         injection_start_time = datetime.now()
         log_dir = None
@@ -458,7 +459,7 @@ class DLLInjector:
                 windows = gw.getWindowsWithTitle("DLL Injector")
                 if not windows:
                     logger.error("Could not find DLL Injector window after launch")
-                    return False
+                    return {"success": False, "error_type": "injector_not_found", "data": None}
             else:
                 logger.info("Found existing DLL Injector window, activating...")
 
@@ -473,7 +474,7 @@ class DLLInjector:
                 logger.info(f"Target process: {process_name} (PID: {pid})")
             except Exception as e:
                 logger.error(f"Error getting process name: {str(e)}")
-                return False
+                return {"success": False, "error_type": "process_info_error", "data": None}
 
             logger.debug("Inputting process ID...")
             self.click_relative(windows[0], 100, 115)
@@ -523,20 +524,20 @@ class DLLInjector:
                 usmap_path = self.get_usmap_path(log_dir) if log_dir else None
                 if usmap_path:
                     logger.info(f"USMap successfully generated at: {usmap_path}")
-                    return usmap_path
-                return True
+                    return {"success": True, "error_type": None, "data": usmap_path}
+                return {"success": True, "error_type": None, "data": None}
             elif injection_status is False:
                 logger.error("DLL injection failed")
-                return False
+                return {"success": False, "error_type": "injection_failed", "data": None}
             elif injection_status == "timeout":
                 logger.error("DLL injection timed out after 10 minutes")
-                return False
+                return {"success": False, "error_type": "timeout", "data": None}
             elif injection_status == "crashed":
                 logger.error("DLL injection failed: game process crashed")
-                return False
+                return {"success": False, "error_type": "game_crashed", "data": None}
             else:
                 logger.error("DLL injection status unknown")
-                return False
+                return {"success": False, "error_type": "unknown", "data": None}
 
         except Exception as e:
             logger.error(f"Error during injection process: {str(e)}")
@@ -549,13 +550,16 @@ class DLLInjector:
                     time.sleep(self.sleep_config['window_close'])
             except Exception as close_error:
                 logger.error(f"Error closing DLL Injector window after error: {str(close_error)}")
-            return False
+            return {"success": False, "error_type": "exception", "data": str(e)}
 
         
     def run_injection_process(self):
         """
         Full process: activate Steam window, detect playable button, click it, get game process, and inject DLL
-        Returns True if successful, False if failed, or the USMap path if injection succeeded
+        Returns a dictionary with:
+            - "success": True if successful, False if failed
+            - "error_type": Error type if failed, None if successful
+            - "data": USMap path if generated, None otherwise
         """
         logger.info("Starting DLL injection process...")
         if self.game_folder:
@@ -565,14 +569,14 @@ class DLLInjector:
         
         if not self.activate_steam_window():
             logger.error("Failed to activate Steam window")
-            return False
+            return {"success": False, "error_type": "steam_window_activation_failed", "data": None}
         
         logger.info("Recording processes before game launch...")
         before_processes = self.get_running_processes()
         
         if not self.detect_and_click_playable():
             logger.error("Failed to find and click playable button")
-            return False
+            return {"success": False, "error_type": "playable_button_not_found", "data": None}
         
         # Define dialogs to check in order
         dialogs_to_check = [
@@ -585,10 +589,7 @@ class DLLInjector:
         # Check for and handle various dialogs
         for dialog in dialogs_to_check:
             logger.info(f"Checking for {dialog['name']}...")
-            self.image_detector.check_and_click_image(
-                image_path=dialog['image_path'],
-                max_retries=5,
-            )
+            self.image_detector.check_and_click_image(image_path=dialog['image_path'])
         
         logger.info(f"Waiting for game to launch...")
         game_launch_time = self.sleep_config['game_launch']
@@ -602,7 +603,7 @@ class DLLInjector:
         
         if not game_process:
             logger.error("Failed to detect game process")
-            return False
+            return {"success": False, "error_type": "game_process_not_detected", "data": None}
         
         logger.info("Minimizing all windows (Win + D)...")
         pg.hotkey('win', 'd')
@@ -611,15 +612,8 @@ class DLLInjector:
         pid = game_process["pid"]
         injection_result = self.inject_dll(pid)
         
-        if injection_result is True:
-            logger.info(f"Successfully injected DLL into {game_process['name']} (PID: {pid})")
-            return True
-        elif isinstance(injection_result, str):  # If result is a string, it's the USMap path
-            logger.info(f"Successfully injected DLL into {game_process['name']} (PID: {pid}) and generated USMap at: {injection_result}")
-            return injection_result
-        else:
-            logger.error(f"Failed to inject DLL into {game_process['name']} (PID: {pid})")
-            return False
+        # Simply return the injection result, which is already in the correct format
+        return injection_result
 
 
 if __name__ == "__main__":
@@ -638,6 +632,29 @@ if __name__ == "__main__":
     logger.info("Starting DLL injection process")
     injector = DLLInjector()
     
-    result = injector.run_injection_process()
-    logger.info(f"DLL injection process {'successful' if result else 'failed'}")
-    print(f"DLL injection {'successful' if result else 'failed'}")
+    max_retries = 5
+    result = None
+    
+    while max_retries > 0:
+        result = injector.run_injection_process()
+        if result["success"]:
+            break
+        max_retries -= 1
+        logger.info(f"Retry attempt {5 - max_retries} of 5")
+    
+    if result:
+        if result["success"]:
+            success_msg = "DLL injection successful"
+            if result["data"]:  # If USMap path is available
+                success_msg += f", USMap generated at: {result['data']}"
+            logger.info(success_msg)
+            print(success_msg)
+        else:
+            error_msg = f"DLL injection failed: {result['error_type']}"
+            if result["data"]:  # If there's additional error data
+                error_msg += f" - {result['data']}"
+            logger.error(error_msg)
+            print(error_msg)
+    else:
+        logger.error("No result returned from injection process")
+        print("DLL injection failed: no result returned")

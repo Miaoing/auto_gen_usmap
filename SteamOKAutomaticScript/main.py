@@ -62,15 +62,26 @@ def main():
                 screenshot_mgr.take_screenshot(game, "start_processing", min_interval_seconds=0)
                 
                 # Process the game (download and check if playable)
-                result = controller.process_game(game)
+                process_result = controller.process_game(game)
                 
                 # Take screenshot after processing result
                 screenshot_mgr.take_screenshot(game, "after_processing", min_interval_seconds=0)
                 
-                if not result:
-                    logger.error(f"Game {game} failed to download or is not playable")
-                    csv_logger.log_download_error(game, "Game failed to download or is not playable")
-                    print(f"{game}: 不可玩, 未注入DLL")
+                if not process_result["success"]:
+                    error_type = process_result["error_type"]
+                    error_data = process_result["data"] if process_result["data"] else "Unknown error"
+                    
+                    if error_type == "easyanticheat_detected":
+                        # Handle EasyAntiCheat detection as a special case
+                        logger.warning(f"Game {game} has EasyAntiCheat: {error_data}")
+                        csv_logger.log_download_error(game, f"EasyAntiCheat detected: {error_data}")
+                        print(f"{game}: ⚠️ 含有反作弊系统 (EasyAntiCheat)")
+                    else:
+                        # Handle other download failures
+                        logger.error(f"Game {game} failed: {error_type} - {error_data}")
+                        csv_logger.log_download_error(game, f"{error_type}: {error_data}")
+                        print(f"{game}: ❌ 不可玩, 原因: {error_type}")
+                        
                     time.sleep(config['timing']['retry_delay'])
                     continue
                 
@@ -78,49 +89,48 @@ def main():
                 csv_logger.log_download_success(game)
                 logger.info(f"Game {game} is playable, download successful")
                 
-                # Initialize inject_result to False by default
-                inject_result = False
+                # Take screenshot before injection
+                screenshot_mgr.take_screenshot(game, "before_injection", min_interval_seconds=0)
                 
-                # If the game is successfully processed and DLL injection is enabled in config
-                if config['dll_injection']['enabled']:
-                    # Take screenshot before injection
-                    screenshot_mgr.take_screenshot(game, "before_injection", min_interval_seconds=0)
-                    
-                    logger.info(f"Game {game} is playable, starting DLL injection process...")
-                    inject_result = injector.run_injection_process()
-                    
-                    # Take screenshot after injection
-                    screenshot_mgr.take_screenshot(game, "after_injection", min_interval_seconds=0)
-                    
-                    # Get the latest log directory if available
-                    log_dir = None
-                    if hasattr(injector, 'latest_log_dir') and injector.latest_log_dir:
-                        log_dir = injector.latest_log_dir
-                        logger.info(f"Injection log directory for {game}: {log_dir}")
-                    
-                    if isinstance(inject_result, str):  # If result is a string, it's the USMap path
-                        logger.info(f"DLL injection successful for game: {game}, USMap path: {inject_result}")
-                        csv_logger.log_injection_success(game, inject_result, log_dir)
-                        print(f"{game}: 可玩, 已注入DLL, USMap路径: {inject_result}")
-                    elif inject_result == "timeout":
-                        logger.error(f"DLL injection timed out for game: {game}")
-                        csv_logger.log_injection_timeout(game, log_dir)
-                        print(f"{game}: 可玩, DLL注入超时")
-                    elif inject_result == "crashed":
-                        logger.error(f"Game crashed during injection: {game}")
-                        csv_logger.log_injection_crash(game, "Game process crashed", log_dir)
-                        print(f"{game}: 可玩, DLL注入时游戏崩溃")
-                    elif inject_result:
+                logger.info(f"Game {game} is playable, starting DLL injection process...")
+                inject_result = injector.run_injection_process()
+                
+                # Take screenshot after injection
+                screenshot_mgr.take_screenshot(game, "after_injection", min_interval_seconds=0)
+                
+                # Get the latest log directory if available
+                log_dir = None
+                if hasattr(injector, 'latest_log_dir') and injector.latest_log_dir:
+                    log_dir = injector.latest_log_dir
+                    logger.info(f"Injection log directory for {game}: {log_dir}")
+                
+                # Handle the dictionary return format
+                if inject_result["success"]:
+                    usmap_path = inject_result["data"]
+                    if usmap_path:  # If USMap path was found
+                        logger.info(f"✅DLL injection successful for game: {game}, 📁 USMap path: {usmap_path}")
+                        csv_logger.log_injection_success(game, usmap_path, log_dir)
+                        print(f"{game}: ✅可玩, 💉已注入DLL, 📁USMap路径: {usmap_path}")
+                    else:
                         logger.info(f"DLL injection successful for game: {game}, but no USMap path found")
                         csv_logger.log_injection_success(game, "No USMap path found", log_dir)
                         print(f"{game}: 可玩, 已注入DLL")
-                    else:
-                        logger.error(f"DLL injection failed for game: {game}")
-                        csv_logger.log_injection_crash(game, "Injection failed", log_dir)
-                        print(f"{game}: 可玩, 未注入DLL")
                 else:
-                    # If DLL injection is disabled
-                    print(f"{game}: 可玩, DLL注入已禁用")
+                    error_type = inject_result["error_type"]
+                    error_data = inject_result["data"] if inject_result["data"] else "Unknown error"
+                    
+                    if error_type == "timeout":
+                        logger.error(f"DLL injection timed out for game: {game}")
+                        csv_logger.log_injection_timeout(game, log_dir)
+                        print(f"{game}: 可玩, DLL注入超时")
+                    elif error_type == "game_crashed":
+                        logger.error(f"Game crashed during injection: {game}")
+                        csv_logger.log_injection_crash(game, "Game process crashed", log_dir)
+                        print(f"{game}: 可玩, DLL注入时游戏崩溃")
+                    else:
+                        logger.error(f"DLL injection failed for game: {game}, error type: {error_type}, details: {error_data}")
+                        csv_logger.log_injection_crash(game, f"Injection failed: {error_type}", log_dir)
+                        print(f"{game}: 可玩, 注入DLL失败 ({error_type})")
                 
                 time.sleep(config['timing']['retry_delay'])
             except Exception as e:
