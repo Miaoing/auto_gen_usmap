@@ -15,8 +15,17 @@ from tqdm import tqdm
 from image_utils import ImageDetector
 from window_utils import activate_window_by_typing, activate_window_by_title, activate_window
 from config import get_config, load_config
+import threading
 
 logger = logging.getLogger()
+
+# Import the SteamGamesCleaner at the top level to avoid circular imports
+try:
+    from delete_steam_games import SteamGamesCleaner
+    CLEANER_AVAILABLE = True
+except ImportError:
+    logger.warning("SteamGamesCleaner not available. Game cleanup during wait time will be disabled.")
+    CLEANER_AVAILABLE = False
 
 # Global variable for screenshot manager - DEPRECATED
 # This will be set by main.py when calling process_game
@@ -35,7 +44,7 @@ class SteamOKController:
         self.config = get_config()
         self.game_controller_config = self.config.get('game_controller')
         self.playable_button_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['playable_button_image'])
-        self.start_game_image = os.path.join(os.path.dirname(__file__), dll_config['images']['start_game_image'])
+        self.start_game_image = os.path.join(os.path.dirname(__file__), self.config['dll_injection']['images']['start_game_image'])
 
         # Get Steam apps paths from config
         self.steam_apps_base = self.config.get('paths').get('steam_apps_base')
@@ -62,6 +71,12 @@ class SteamOKController:
         # Installation timeout from config
         self.installation_timeout = self.config.get('timing').get('installation_timeout')
         logger.info(f"Installation timeout set to {self.installation_timeout} seconds ({self.installation_timeout/60:.1f} minutes)")
+        
+        # Clean operation flag
+        self.cleaning_enabled = True
+        self.clean_complete = False
+        self.clean_thread = None
+        self.preserve_time_minutes = 5  # Default to preserving files from the last 5 minutes
         
         logger.info(f"SteamOKController initialized with excel_path: {excel_path}")
         if self.screenshot_mgr:
@@ -632,6 +647,35 @@ class SteamOKController:
             
         return result
 
+    def run_clean_operation(self):
+        """
+        Run the cleaning operation in a separate thread.
+        This is meant to be called during wait times.
+        """
+        if not CLEANER_AVAILABLE or not self.cleaning_enabled:
+            logger.info("Cleaning operation is disabled or unavailable")
+            return False
+
+        try:
+            logger.info("Starting Steam games cleanup process in background")
+            
+            # Calculate a timestamp to preserve recent files (default: 30 minutes)
+            # This will prevent deletion of any files modified in the last 30 minutes
+            preserve_after = time.time() - (self.preserve_time_minutes * 60)
+            timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(preserve_after))
+            logger.info(f"Preserving files modified after: {timestamp}")
+            
+            cleaner = SteamGamesCleaner(preserve_after=preserve_after)
+            stats = cleaner.clean_steamapps()
+            
+            logger.info("Background Steam games cleanup completed successfully")
+            logger.info(f"Statistics: {stats}")
+            self.clean_complete = True
+            return True
+        except Exception as e:
+            logger.error(f"Error during background cleanup: {str(e)}")
+            return False
+
     def process_game(self, game_name):
         """
         处理单个游戏的完整流程
@@ -688,9 +732,34 @@ class SteamOKController:
             if self.screenshot_mgr:
                 self.screenshot_mgr.take_screenshot(game_name, "after_start_game", min_interval_seconds=0)
 
+            time.sleep(5)
+            # Start cleanup operation in a separate thread during wait time
+            self.clean_complete = False
+            if CLEANER_AVAILABLE and self.cleaning_enabled and not self.clean_thread:
+                logger.info("Starting Steam games cleanup in background during wait time")
+                self.clean_thread = threading.Thread(target=self.run_clean_operation, daemon=True)
+                self.clean_thread.start()
+
             logger.info("Waiting 40 seconds for game startup...")
             for _ in tqdm(range(40), desc="Waiting for game startup"):
                 time.sleep(1)
+            
+            # Wait for the clean thread to complete if it's still running
+            if self.clean_thread and self.clean_thread.is_alive():
+                logger.info("Waiting for cleanup operation to complete...")
+                # Set a maximum wait time for the clean operation
+                max_wait = 20  # seconds
+                wait_start = time.time()
+                while self.clean_thread.is_alive() and time.time() - wait_start < max_wait:
+                    time.sleep(1)
+                
+                if self.clean_thread.is_alive():
+                    logger.warning("Cleanup operation is still running but proceeding with game processing")
+                else:
+                    logger.info("Cleanup operation completed successfully")
+            
+            # Reset the clean thread
+            self.clean_thread = None
             
             logger.info("Waiting for game to start...")
             while not self.move_steamok_to_background() and not self.activate_steam_window():
