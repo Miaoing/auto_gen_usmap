@@ -617,6 +617,22 @@ class DLLInjector:
         return injection_result
 
 
+    def run_injection_process_with_retry(self, max_retries=3):
+        """
+        Run the injection process with retry logic
+        """'
+        result = None
+        for attempt in range(max_retries):
+            logger.info(f"Injection Attempt {attempt + 1} of {max_retries}...")
+            result = self.run_injection_process()
+            
+            if result["success"]:
+                return result
+            else:
+                logger.error(f"Injection failed: {result['error_type']}")
+
+        return result
+        
 if __name__ == "__main__":
     import sys
     
