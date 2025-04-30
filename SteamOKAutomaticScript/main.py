@@ -1,6 +1,5 @@
 import time
 import logging
-import pandas as pd
 import argparse
 import os
 from datetime import datetime
@@ -44,21 +43,17 @@ def main():
     try:
         logger.info("脚本启动中...")
         
-        # Initialize the game controller with the Excel path from config
-        controller = SteamOKController(excel_path=config['paths']['results_excel'], screenshot_mgr=screenshot_mgr)
+        # Initialize the game controller without Excel path
+        controller = SteamOKController(screenshot_mgr=screenshot_mgr)
         # Note: Game installation timeout can be configured in config.yaml under timing.installation_timeout
         
         # Initialize the DLL injector
         injector = DLLInjector()
         
-        try:
-            df = pd.read_excel(config['paths']['test_games_excel'])
-            start_index = df.index[df.iloc[:, 2].isna()].tolist()[0] if any(df.iloc[:, 2].isna()) else 0
-            games = df.iloc[start_index:, 1].tolist()
-            logger.info(f"从第{start_index + 1}行开始加载{len(games)}个游戏")
-        except Exception as e:
-            logger.error(f"从Excel加载游戏列表时出错: {e}")
-            games = []
+        # Assume games is a list - for testing purposes, you can define a sample list here
+        # In a real scenario, you would pass this list from elsewhere
+        games = ["Partisans 1941", "Azur Lane Crosswave", "Redfall"]  # Example list, replace as needed
+        logger.info(f"加载{len(games)}个游戏")
 
         for game in games:
             try:

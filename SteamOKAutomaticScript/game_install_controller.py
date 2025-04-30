@@ -6,10 +6,7 @@ import pyautogui as pg
 import pygetwindow as gw
 import pyperclip
 import re
-import pandas as pd
 import win32gui
-from openpyxl import load_workbook
-from openpyxl.drawing.image import Image
 from license_agreement_handler import LicenseAgreementHandler
 from tqdm import tqdm
 from image_utils import ImageDetector
@@ -32,11 +29,10 @@ except ImportError:
 # Now using self.screenshot_mgr inside the SteamOKController class instead
 
 class SteamOKController:
-    def __init__(self, excel_path, screenshot_mgr):
+    def __init__(self, screenshot_mgr):
         self.results = {}  # 存储游戏检查结果
         self.current_game_index = 0  # 当前处理的游戏索引
         self.error_messages = {}  # 存储游戏安装失败的错误信息
-        self.excel_path = excel_path  # Excel文件路径
         self.license_handler = LicenseAgreementHandler()  # 创建许可协议处理器实例
         self.screenshot_mgr = screenshot_mgr  # Store screenshot manager as instance variable
         
@@ -78,7 +74,7 @@ class SteamOKController:
         self.clean_thread = None
         self.preserve_time_minutes = 5  # Default to preserving files from the last 5 minutes
         
-        logger.info(f"SteamOKController initialized with excel_path: {excel_path}")
+        logger.info("SteamOKController initialized")
         if self.screenshot_mgr:
             logger.info("Screenshot manager is configured and ready")
         else:
@@ -678,11 +674,18 @@ class SteamOKController:
 
     def process_game(self, game_name):
         """
-        处理单个游戏的完整流程
-        Returns a dictionary with:
-            - "success": True if successful, False if failed
-            - "error_type": Error type if failed, None if successful
-            - "data": Additional data if any, None otherwise
+        Process a game to check if it's playable
+        
+        Args:
+            game_name (str): Name of the game to process
+            
+        Returns:
+            dict: A dictionary with result information
+                {
+                    "success": bool,  # Whether processing was successful (game is playable)
+                    "error_type": str,  # Type of error if any
+                    "data": str        # Additional data about result or error
+                }
         """
         try:
             logger.info(f"Starting game processing: {game_name}")
@@ -815,7 +818,6 @@ class SteamOKController:
                 return {"success": False, "error_type": "max_attempts_reached", "data": error_msg}
 
             self.results[game_name] = True
-            self._save_game_result(game_name, True)
             logger.info(f"Successfully processed game: {game_name}")
             return {"success": True, "error_type": None, "data": None}
 
@@ -834,84 +836,4 @@ class SteamOKController:
         logger.error(f"Game processing failed: {game_name} - {error_msg}")
         
         # Save the result to CSV/Excel
-        self._save_game_result(game_name, False, error_msg)
         self.license_handler.stop()
-
-    def _save_game_result(self, game_name, available, error_msg=None):
-        """保存单个游戏的检查结果到Excel文件"""
-        try:
-            df = pd.read_excel(self.excel_path)
-            game_index = df.index[df.iloc[:, 1] == game_name].tolist()
-            
-            # Get current timestamp for logging
-            timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-            
-            if game_index:
-                # Update availability status (column 2)
-                df.iloc[game_index[0], 2] = str("是" if available else "否")  # Cast to string to avoid dtype warning
-                
-                # If not available, update error message column
-                if not available and error_msg:
-                    # Check if this is an EasyAntiCheat error
-                    if "EasyAntiCheat" in error_msg:
-                        df.iloc[game_index[0], 2] = "EasyAntiCheat"  # Special status for EAC games
-                        error_with_time = f"[{timestamp}] {error_msg}"
-                    # Format error message with timestamp for timeout errors
-                    elif "timeout" in error_msg.lower():
-                        timeout_minutes = self.installation_timeout / 60
-                        error_with_time = f"[{timestamp}] 安装超时({timeout_minutes:.1f}分钟): {error_msg}"
-                    else:
-                        error_with_time = f"[{timestamp}] {error_msg}"
-                        
-                    df.iloc[game_index[0], 3] = error_with_time
-                
-                # Update timestamp column if it exists (assuming it's column 4)
-                if df.shape[1] > 4:  
-                    df.iloc[game_index[0], 4] = timestamp
-
-            # Save the updated Excel file
-            df.to_excel(self.excel_path, index=False)
-            logger.info(f"Saved result for {game_name} to {self.excel_path}")
-
-            # Also save to text file as backup
-            os.makedirs(os.path.dirname(self.excel_path), exist_ok=True)
-            txt_path = os.path.join(os.path.dirname(self.excel_path), 'game_results.txt')
-            with open(txt_path, 'a', encoding='utf-8') as f:
-                if not available and error_msg and "EasyAntiCheat" in error_msg:
-                    status = "有EasyAntiCheat"
-                else:
-                    status = "可以开玩" if available else "不可开玩"
-                error_info = f" (错误: {error_msg}, 时间: {timestamp})" if not available and error_msg else ""
-                f.write(f"{game_name}: {status}{error_info}\n")
-
-        except Exception as e:
-            logger.error(f"Error saving result for {game_name}: {str(e)}")
-
-    def save_results(self):
-        """保存检查结果到Excel文件"""
-        try:
-            df = pd.read_excel(self.excel_path)
-            for game, available in self.results.items():
-                # 在Excel中找到对应的游戏行
-                game_index = df.index[df.iloc[:, 0] == game].tolist()
-                if game_index:
-                    # 更新游戏状态（第二列）
-                    df.iloc[game_index[0], 1] = "是" if available else "否"
-                    # 如果游戏安装失败，在第三列记录错误信息
-                    if not available and game in self.error_messages:
-                        df.iloc[game_index[0], 2] = self.error_messages[game]
-
-            # 保存更新后的Excel文件
-            df.to_excel(self.excel_path, index=False)
-            logger.info(f"Results saved to {self.excel_path}")
-            
-            # 同时保存到txt文件作为备份
-            txt_path = os.path.join(os.path.dirname(self.excel_path), 'game_results.txt')
-            with open(txt_path, 'w', encoding='utf-8') as f:
-                for game, available in self.results.items():
-                    status = "可以开玩" if available else "不可开玩"
-                    error_info = f" (错误: {self.error_messages[game]})" if not available and game in self.error_messages else ""
-                    f.write(f"{game}: {status}{error_info}\n")
-            
-        except Exception as e:
-            logger.error(f"Error saving results: {e}")
