@@ -5,11 +5,14 @@ Steam Games Cleanup Script
 
 This script deletes files and directories in the Steam installation to free up space.
 It removes:
-- Game directories in steamapps/common/
-- In-progress downloads in steamapps/downloading/
-- Temporary files in steamapps/temp/
-- Game manifest files (appmanifest_*.acf)
+- Game directories in steamapps/common/ (except Steam-related ones like Steamworks Shared)
+- In-progress downloads in steamapps/downloading/ (except Steam-related ones)
+- Game manifest files (appmanifest_*.acf) (except Steam-related ones)
+
+The script preserves:
 - Shader cache files in shadercache/
+- Temporary files in steamapps/temp/
+- Steam-related downloads and update files
 
 The Steam directory path is read from the application's configuration file.
 """
@@ -32,6 +35,24 @@ from config import get_config, load_config
 
 # Set up logging
 logger = logging.getLogger(__name__)
+
+# List of Steam-related directories that should be preserved
+STEAM_RESERVED_DIRS = [
+    'Steamworks Shared',
+    'Steam Controller Configs',
+    'Steam Controller Rumble',
+    'SteamVR',
+    'Steam',
+    'SteamCMD',
+    'SteamWorkshop',
+    'SteamApps',
+    'SteamLibrary',
+    'steamapps',
+    'downloading',
+    'content',
+    'shadercache',
+    'temp'
+]
 
 class SteamGamesCleaner:
     """Class to handle the Steam games cleanup process."""
@@ -70,6 +91,13 @@ class SteamGamesCleaner:
         Returns:
             bool: True if the file should be deleted, False otherwise
         """
+        # Check if the path contains any reserved directories
+        path_name = os.path.basename(path)
+        for reserved_dir in STEAM_RESERVED_DIRS:
+            if reserved_dir.lower() in path_name.lower():
+                logger.info(f"Preserving Steam-related file/directory: {path}")
+                return False
+                
         if not self.preserve_after:
             return True
             
@@ -101,7 +129,7 @@ class SteamGamesCleaner:
             if os.path.exists(directory_path):
                 # Check if we should preserve this directory based on timestamp
                 if not self.should_delete(directory_path):
-                    logger.info(f"Skipping directory due to timestamp: {directory_path}")
+                    logger.info(f"Skipping directory due to timestamp or it's Steam-related: {directory_path}")
                     return False
                 
                 if os.path.isdir(directory_path):
@@ -135,9 +163,9 @@ class SteamGamesCleaner:
             for file_path in files:
                 try:
                     if os.path.isfile(file_path):
-                        # Check if we should preserve this file based on timestamp
+                        # Check if we should preserve this file based on timestamp or if it's Steam-related
                         if not self.should_delete(file_path):
-                            logger.info(f"Skipping file due to timestamp: {file_path}")
+                            logger.info(f"Skipping file due to timestamp or it's Steam-related: {file_path}")
                             continue
                             
                         os.remove(file_path)
@@ -161,12 +189,10 @@ class SteamGamesCleaner:
         stats = {
             'common_dirs_deleted': 0,
             'downloading_dirs_deleted': 0,
-            'temp_dirs_deleted': 0,
-            'manifest_files_deleted': 0,
-            'shadercache_dirs_deleted': 0
+            'manifest_files_deleted': 0
         }
         
-        # 1. Delete game directories in steamapps/common/
+        # 1. Delete game directories in steamapps/common/ (except Steam-related ones)
         common_dir = os.path.join(self.steam_apps_dir, 'common')
         if os.path.exists(common_dir):
             game_dirs = [os.path.join(common_dir, d) for d in os.listdir(common_dir) 
@@ -176,7 +202,7 @@ class SteamGamesCleaner:
                 if self.delete_directory(game_dir):
                     stats['common_dirs_deleted'] += 1
         
-        # 2. Delete downloading directory
+        # 2. Delete downloading directory contents (except Steam-related ones)
         downloading_dir = os.path.join(self.steam_apps_dir, 'downloading')
         if os.path.exists(downloading_dir):
             download_dirs = [os.path.join(downloading_dir, d) for d in os.listdir(downloading_dir) 
@@ -186,28 +212,9 @@ class SteamGamesCleaner:
                 if self.delete_directory(download_dir):
                     stats['downloading_dirs_deleted'] += 1
         
-        # 3. Delete temp directory
-        temp_dir = os.path.join(self.steam_apps_dir, 'temp')
-        if os.path.exists(temp_dir):
-            temp_items = [os.path.join(temp_dir, d) for d in os.listdir(temp_dir)]
-            
-            for item in temp_items:
-                if self.delete_directory(item):
-                    stats['temp_dirs_deleted'] += 1
-        
-        # 4. Delete game manifest files (appmanifest_*.acf)
+        # 3. Delete game manifest files (appmanifest_*.acf) (except Steam-related ones)
         manifest_pattern = os.path.join(self.steam_apps_dir, 'appmanifest_*.acf')
         stats['manifest_files_deleted'] = self.delete_files(manifest_pattern)
-        
-        # 5. Delete shader cache directories
-        shadercache_dir = os.path.join(self.steam_apps_dir, 'shadercache')
-        if os.path.exists(shadercache_dir):
-            cache_dirs = [os.path.join(shadercache_dir, d) for d in os.listdir(shadercache_dir) 
-                          if os.path.isdir(os.path.join(shadercache_dir, d))]
-            
-            for cache_dir in cache_dirs:
-                if self.delete_directory(cache_dir):
-                    stats['shadercache_dirs_deleted'] += 1
         
         return stats
 
@@ -315,9 +322,8 @@ def main():
         print("Steam games cleanup completed successfully.")
         print(f"- Game directories deleted: {stats['common_dirs_deleted']}")
         print(f"- Downloading directories deleted: {stats['downloading_dirs_deleted']}")
-        print(f"- Temporary files deleted: {stats['temp_dirs_deleted']}")
         print(f"- Game manifest files deleted: {stats['manifest_files_deleted']}")
-        print(f"- Shader cache directories deleted: {stats['shadercache_dirs_deleted']}")
+        print("Note: Shader cache, temporary files, and Steam-related content were preserved.")
         
     except Exception as e:
         logger.error(f"Error during cleanup: {str(e)}")
