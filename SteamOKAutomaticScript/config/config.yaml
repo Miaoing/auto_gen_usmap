@@ -3,8 +3,8 @@
 # Paths Configuration
 paths:
   # Excel file paths
-  results_excel: "result/test_games.xlsx"
-  test_games_excel: "result/test_games.xlsx"
+  results_excel: "result/games.xlsx"
+  test_games_excel: "result/games.xlsx"
   
   # Screenshot directory
   screenshots_dir: "screenshots"
@@ -13,7 +13,7 @@ paths:
   logs_dir: "logs"
   
   # Steam directory paths
-  steam_apps_base: "F:/steam/steamapps"  # Base SteamApps directory
+  steam_apps_base: "E:/Steam/steamapps"  # Base SteamApps directory
   
 # Image Detection
 image_detector:
@@ -44,6 +44,7 @@ game_controller:
   playable_button_image: "png/steam_playable_button.png"
   playable_download_icon_image: "png/steam_playable_download_icon.png"
   steamok_not_save_image: "png/steamok_not_save.png"
+  steamok_save_image: "png/steamok_save.png"
   steamok_not_use_save_image: "png/steamok_not_use_save.png"
   steamok_search_box_image: "png/steamok_search_box.png"
   steamok_game_list_image: "png/steamok_game_list.png"

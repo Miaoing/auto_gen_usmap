@@ -48,6 +48,7 @@ class SteamOKController:
         
         # Initialize paths for image detection
         self.steamok_not_save_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steamok_not_save_image'])
+        self.steamok_save_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steamok_save_image'])
         self.steamok_search_box_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steamok_search_box_image'])
         self.steamok_game_list_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steamok_game_list_image'])
         self.steamok_play_button_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steamok_play_button_image'])
@@ -606,6 +607,17 @@ class SteamOKController:
             logger.info("'Not Save' button found and clicked successfully")
         else:
             logger.info("'Not Save' button was not found or could not be clicked (this is normal if the dialog isn't shown)")
+            
+        return result
+    def check_and_click_save_button(self):
+        """Check for and click the 'Save' button if it appears"""
+        logger.info("Checking for 'Save' button...")
+        result = self.image_detector.check_and_click_image(image_path=self.steamok_save_image)
+        
+        if result:
+            logger.info("'Save' button found and clicked successfully")
+        else:
+            logger.info("'Save' button was not found or could not be clicked (this is normal if the dialog isn't shown)")
             
         return result
     def check_and_click_not_use_save_button(self):
