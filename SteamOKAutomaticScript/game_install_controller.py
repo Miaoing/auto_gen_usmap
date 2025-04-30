@@ -35,8 +35,8 @@ class SteamOKController:
         self.config = get_config()
         self.game_controller_config = self.config.get('game_controller')
         self.playable_button_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['playable_button_image'])
-        self.playable_download_icon_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['playable_download_icon_image'])
-        
+        self.start_game_image = os.path.join(os.path.dirname(__file__), dll_config['images']['start_game_image'])
+
         # Get Steam apps paths from config
         self.steam_apps_base = self.config.get('paths').get('steam_apps_base')
         # Create the path to common folder
@@ -481,7 +481,7 @@ class SteamOKController:
             - "easyanticheat": EasyAntiCheat was detected
         """
         playable_image = self.playable_button_image
-        playable2_image = self.playable_download_icon_image
+        playable2_image = self.start_game_image
 
         # Record start time for timeout tracking
         start_time = time.time()
