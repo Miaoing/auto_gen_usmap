@@ -652,8 +652,8 @@ class SteamOKController:
                 self._handle_game_error(game_name, error_msg)
                 return {"success": False, "error_type": "steamok_window_activation_failed", "data": error_msg}
             
-            # Check for and click "Not Save" button if it appears
-            if self.check_and_click_not_save_button():
+            # Check for and click "Save" button if it appears
+            if self.check_and_click_save_button():
                 time.sleep(1.5)
             
             if not self.search_game(game_name):
