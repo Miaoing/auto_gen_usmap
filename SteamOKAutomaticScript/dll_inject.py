@@ -323,7 +323,8 @@ class DLLInjector:
             log_dir = self.get_latest_log_directory(base_log_path, injection_start_time)
             if not log_dir:
                 time.sleep(check_interval)
-                if time.time() % 60 == 0:
+                elapsed_time = int(time.time() - start_time) % 60
+                if elapsed_time == 0:
                     logger.error("No valid timestamp directories found")
                 continue
 
@@ -630,7 +631,7 @@ if __name__ == "__main__":
 
     # Initialize CSV logger for debug testing
     from csv_logger import GameStatusLogger
-    csv_logger = GameStatusLogger(webhook_url="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=41d709ab-4cbd-43bd-99a8-0be822b7584a")
+    csv_logger = GameStatusLogger(webhook_url="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=d2ae19b3-0efd-44ef-b1f8-c6af76b113b5")
     logger.info(f"CSV logging enabled for debug testing to: {csv_logger.get_csv_path()}")
     
     # Create and run injector
