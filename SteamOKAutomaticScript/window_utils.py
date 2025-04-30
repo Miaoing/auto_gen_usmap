@@ -128,3 +128,12 @@ def activate_window(window_name, sleep_config):
     # If both methods failed
     logger.error(f"Failed to activate {window_name} window by any method")
     return False 
+
+if __name__ == "__main__":
+    sleep_config = {
+        'typing_delay': 0.5,
+        'app_launch_delay': 0.5,
+        'window_activate_delay': 0.5,
+        'click_delay': 1
+    }
+    activate_window("Steam", sleep_config)
