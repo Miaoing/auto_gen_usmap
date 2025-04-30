@@ -620,7 +620,7 @@ class DLLInjector:
     def run_injection_process_with_retry(self, max_retries=3):
         """
         Run the injection process with retry logic
-        """'
+        """
         result = None
         for attempt in range(max_retries):
             logger.info(f"Injection Attempt {attempt + 1} of {max_retries}...")
