@@ -97,7 +97,7 @@ def main():
                 screenshot_mgr.take_screenshot(game, "before_injection", min_interval_seconds=0)
                 
                 logger.info(f"Game {game} is playable, starting DLL injection process...")
-                inject_result = injector.run_injection_process()
+                inject_result = injector.run_injection_process_with_retry()
                 
                 # Take screenshot after injection
                 screenshot_mgr.take_screenshot(game, "after_injection", min_interval_seconds=0)
