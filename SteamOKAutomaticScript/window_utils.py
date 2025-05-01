@@ -111,6 +111,9 @@ def activate_window(window_name, sleep_config):
         True if activation was successful by any method, False otherwise
     """
     logger.info(f"Attempting to activate {window_name} window...")
+    # Show desktop first by sending Windows+D
+    pg.hotkey('win', 'd')
+    time.sleep(0.5)
     max_attempts = 3
     for attempt in range(max_attempts):
         try:
