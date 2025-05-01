@@ -563,14 +563,6 @@ class SteamOKController:
                         if should_log and check_count > 12:  # Only log after 2 minutes
                             logger.debug(f"playable图标检测失败")
 
-                    # 轻微移动Steam窗口以防止睡眠
-                    windows = gw.getWindowsWithTitle("Steam")
-                    if windows:
-                        for window in windows:
-                            if window.title == "Steam":
-                                pg.click(window.left + 5, window.top + 5)
-                                time.sleep(1)
-                                break
 
                     # 任意一个图标检测到就返回True
                     if playable2_location or playable_location:

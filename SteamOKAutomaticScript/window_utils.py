@@ -111,20 +111,21 @@ def activate_window(window_name, sleep_config):
         True if activation was successful by any method, False otherwise
     """
     logger.info(f"Attempting to activate {window_name} window...")
-    try:
-        # First try to activate by title (faster if window exists)
-        if activate_window_by_title(window_name, sleep_config):
-            logger.info(f"Successfully activated {window_name} window by title")
-            return True
-    except Exception as e:
-        logger.warning(f"Failed to activate {window_name} window by title: {str(e)}")
-    
-    # If activation by title failed, try the typing method
-    logger.info(f"Falling back to typing method for {window_name}")
-    if activate_window_by_typing(window_name, sleep_config):
-        logger.info(f"Successfully activated {window_name} window by typing")
-        return True
-    
+    max_attempts = 3
+    for attempt in range(max_attempts):
+        try:
+            # First try to activate by title (faster if window exists)
+            if activate_window_by_title(window_name, sleep_config):
+                logger.info(f"Successfully activated {window_name} window by title")
+                return True
+        except Exception as e:
+            logger.warning(f"Failed to activate {window_name} window by title: {str(e)}")
+        
+        # If activation by title failed, try the typing method
+        logger.info(f"Falling back to typing method for {window_name}")
+        activate_window_by_typing(window_name, sleep_config)
+        logger.info(f"Try to activate {window_name} window by typing")
+
     # If both methods failed
     logger.error(f"Failed to activate {window_name} window by any method")
     return False 
@@ -137,3 +138,5 @@ if __name__ == "__main__":
         'click_delay': 1
     }
     activate_window("Steam", sleep_config)
+    activate_window("SteamOK", sleep_config)
+    
