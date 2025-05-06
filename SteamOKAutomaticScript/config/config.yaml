@@ -50,6 +50,7 @@ game_controller:
   steamok_game_list_image: "png/steamok_game_list.png"
   steamok_play_button_image: "png/steamok_play_button.png"
   steamok_confirm_play_button_image: "png/steamok_confirm_play_button.png"
+  steamok_start_game_step_image: "png/steamok_start_game_step.png"
   steam_install_button_image: "png/steam_install_button.png"
   steam_install_button_image2: "png/steam_install_button2.png"
   steam_reinstall_button_image: "png/steam_reinstall_button.png"
