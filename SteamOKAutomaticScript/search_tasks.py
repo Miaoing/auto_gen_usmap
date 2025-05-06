@@ -63,6 +63,7 @@ def search_error_tasks(base_url="http://localhost:8080"):
                     matching_tasks.append({
                         'id': task_id,
                         'name': task['name'],
+                        'Zip_Path': task['client_package_path'],
                         'game_name': game_name,
                         'status': task['status'],
                         'info': task.get('info', ''),

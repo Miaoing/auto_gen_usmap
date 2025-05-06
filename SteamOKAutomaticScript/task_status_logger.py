@@ -26,7 +26,7 @@ class TaskStatusLogger:
         if not os.path.exists(self.csv_path):
             with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=[
-                    'id', 'Steam_Game_Name', 'Status', 'USMap_Path', 
+                    'id', 'Steam_Game_Name', 'Zip_Path', 'Status', 'USMap_Path', 
                     'Error_Detail', 'Last_Updated'
                 ])
                 writer.writeheader()
@@ -52,7 +52,12 @@ class TaskStatusLogger:
         if force or (current_time - self.last_pull_time) >= self.pull_interval:
             logger.info("Pulling task data from database...")
             try:
-                tasks = search_error_tasks(self.base_url)
+                try:
+                    tasks = search_error_tasks(self.base_url)
+                except Exception as e:
+                    logger.error(f"Error searching task data: {str(e)}")
+                    return None
+
                 if tasks:
                     # Only count and return new tasks
                     current_task_ids = set(self.load_current_tasks().keys())
@@ -62,12 +67,16 @@ class TaskStatusLogger:
                     else:
                         new_tasks = [task for task in new_tasks if int(task['id']) not in range(179,375)]
                     if new_tasks:
-                        self.update_tasks_in_csv(new_tasks)
-                        logger.info(f"Found {len(tasks)} tasks, added {len(new_tasks)} new tasks to CSV")
+                        try:
+                            self.update_tasks_in_csv(new_tasks)
+                        except Exception as e:
+                            logger.error(f"Error updating task data: {str(e)}")
+                            return None
+                        logger.info(f"Found {len(new_tasks)} new tasks, added {len(new_tasks)} new tasks to CSV")
                         self.last_pull_time = current_time
                         return new_tasks
                     else:
-                        logger.info(f"Found {len(tasks)} tasks, but all are already in CSV")
+                        logger.info(f"Found {len(new_tasks)} newtasks, but all are already in CSV")
                         self.last_pull_time = current_time
                         return []
                 else:
@@ -92,7 +101,8 @@ class TaskStatusLogger:
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
         new_tasks_added = 0
-        
+
+
         # Only add new tasks, don't update existing ones
         for task in tasks:
             task_id = task['id']
@@ -101,6 +111,7 @@ class TaskStatusLogger:
                 current_tasks[task_id] = {
                     'id': task_id,
                     'Steam_Game_Name': task['game_name'],
+                    'Zip_Path': task['Zip_Path'],
                     'Status': 'unprocessed',
                     'USMap_Path': '',
                     'Error_Detail': task.get('info', ''),
@@ -114,6 +125,7 @@ class TaskStatusLogger:
                     self.send_webhook({
                         'type': 'new_task',
                         'task_id': task_id,
+                        'Zip_Path': task['Zip_Path'],
                         'game_name': task['game_name'],
                         'status': 'unprocessed',
                         'timestamp': timestamp
@@ -154,7 +166,7 @@ class TaskStatusLogger:
         try:
             with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=[
-                    'id', 'Steam_Game_Name', 'Status', 'USMap_Path', 
+                    'id', 'Steam_Game_Name', 'Zip_Path', 'Status', 'USMap_Path', 
                     'Error_Detail', 'Last_Updated'
                 ])
                 writer.writeheader()
