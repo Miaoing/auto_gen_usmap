@@ -217,7 +217,7 @@ def check_anticheat(extract_folder):
         logger.error(f"Error checking for anti-cheat: {str(e)}")
         # If there's an error, we'll continue anyway but log it
         return False
-def batch_process_tasks(injector, csv_logger, task_logger, task_limit, retry_delay):
+def batch_process_tasks(injector, csv_logger, task_logger, task_limit, retry_delay, mounted_folder, output_path, base_url):
     unprocessed_tasks = task_logger.get_unprocessed_tasks(limit=task_limit)
     processed_count = 0
     if not unprocessed_tasks:
@@ -226,15 +226,19 @@ def batch_process_tasks(injector, csv_logger, task_logger, task_limit, retry_del
     logger.info(f"发现{len(unprocessed_tasks)}个未处理的任务，开始处理")
     for task in unprocessed_tasks:
         task_id = task['id']
+        task_id = 671970
+        zip_name = r'2099670_piratesjourney.zip'
         game_name = task['Steam_Game_Name']
+
         logger.info(f"开始处理任务 {task_id}: {game_name}")
 
         # Mark task as processing
         task_logger.mark_task_processing(task_id)
-        process_task(task_id, mounted_folder, zip_name, output_path)
+        process_task(task_id, mounted_folder, zip_name, output_path, base_url)
+        processed_count += 1
+    return processed_count
 
-
-def process_task(task_id, mounted_folder=None, zip_name=None, output_path="downloads"):
+def process_task(task_id, mounted_folder=None, zip_name=None, output_path="downloads", base_url=None):
     """Process a single task
     
     Args:
@@ -301,7 +305,7 @@ def process_task(task_id, mounted_folder=None, zip_name=None, output_path="downl
                     task_logger.mark_task_completed(task_id, usmap_path)
 
                     # Attempt to upload USMAP file
-                    upload_result = upload_usmap(task_id, usmap_path, base_url=args.base_url)
+                    upload_result = upload_usmap(task_id, usmap_path, base_url=base_url)
 
                     if upload_result:
                         logger.info(f"Successfully uploaded USMAP for task {task_id}")
@@ -370,15 +374,7 @@ def main():
     parser.add_argument('--base_url', type=str, default='http://30.160.52.57:8080', help='Base URL for the server')
     parser.add_argument('--webhook_url', default='https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=d2ae19b3-0efd-44ef-b1f8-c6af76b113b5', help='URL for webhook notifications')
     parser.add_argument('--csv_path', type=str, default='task_status_local_games.csv', help='Path to the CSV file for task status')
-    # Initialize the CSV logger
-    webhook_url = args.webhook_url
-    csv_logger = GameStatusLogger(webhook_url=webhook_url)
-    logger.info(f"CSV logging enabled to: {csv_logger.get_csv_path()}")
 
-    # Initialize the task status logger
-    task_logger = TaskStatusLogger(webhook_url=webhook_url, base_url=args.base_url, csv_path=args.csv_path)
-    logger.info(f"Task status logging enabled to: {task_logger.get_csv_path()}")
-    
     args = parser.parse_args()
     start_id = args.start
     end_id = args.end
@@ -386,7 +382,16 @@ def main():
     zip_name = args.zip_name
     output_path = args.output_path
     delay = args.delay
+    webhook_url = args.webhook_url
+    
+    # Initialize the CSV logger
+    csv_logger = GameStatusLogger(webhook_url=webhook_url)
+    logger.info(f"CSV logging enabled to: {csv_logger.get_csv_path()}")
 
+    # Initialize the task status logger
+    task_logger = TaskStatusLogger(webhook_url=webhook_url, base_url=args.base_url, csv_path=args.csv_path)
+    logger.info(f"Task status logging enabled to: {task_logger.get_csv_path()}")
+    
     # Run the normal game installation process
     try:
         logger.info("破解游戏脚本启动中...")
@@ -421,8 +426,32 @@ def main():
         while True:
             start_time = time.time()
             print(f"开始处理任务")
-
-
+            processed_count = batch_process_tasks(injector, csv_logger, task_logger, task_limit, retry_delay, mounted_folder, output_path, base_url)
+            # If we processed tasks, don't wait as long before checking again
+            if processed > 0:
+                logger.info(f"本次处理了 {processed} 个任务，30秒后检查新任务")
+                time.sleep(30)  # Short wait after processing tasks
+            else:
+                # Calculate how long to wait - if processing took a long time, we might not need to wait at all
+                elapsed = time.time() - start_time
+                wait_time = max(0, check_interval - elapsed)
+                
+                if wait_time > 0:
+                    logger.info(f"没有任务需要处理，等待 {wait_time:.0f} 秒后重新检查")
+                    # Sleep in smaller increments to allow for cleaner shutdown
+                    sleep_increment = 10  # 10 seconds
+                    remaining = wait_time
+                    while remaining > 0:
+                        time.sleep(min(remaining, sleep_increment))
+                        remaining -= sleep_increment
+    except KeyboardInterrupt:
+        logger.info("收到中断信号，脚本正在退出...")
+        print("脚本已中断")
+    except Exception as e:
+        logger.error(f"应用程序错误: {e}")
+        print(f"错误: {e}")
+    finally:
+        logger.info("脚本结束")
 if __name__ == '__main__':
     main()
 
