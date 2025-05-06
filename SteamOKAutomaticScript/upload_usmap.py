@@ -78,13 +78,13 @@ def upload_usmap(task_id, usmap_path, base_url="http://localhost:8080", aes_key=
             print(f"Response: {response.json().get('message', '')}")
             
             # After successful upload, trigger task rerun
-            print("\nTriggering task rerun...")
-            if rerun_task(task_id, base_url):
-                print("Task has been successfully queued for rerun")
-                return True
-            else:
-                print("Failed to trigger task rerun")
-                return False
+            # print("\nTriggering task rerun...")
+            # if rerun_task(task_id, base_url):
+            #     print("Task has been successfully queued for rerun")
+            #     return True
+            # else:
+            #     print("Failed to trigger task rerun")
+            #     return False
         else:
             print(f"Error uploading USMAP: {response.status_code}")
             print(f"Error message: {response.json().get('error', 'Unknown error')}")
@@ -111,7 +111,7 @@ def main():
     ue_version = sys.argv[4] if len(sys.argv) > 4 else None
     
     # You can change the base_url here if needed
-    base_url = "http://localhost:8080"
+    base_url = "http://30.160.52.57:8080"
     
     upload_usmap(task_id, usmap_path, base_url, aes_key, ue_version)
 
