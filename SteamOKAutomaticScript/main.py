@@ -115,7 +115,7 @@ def process_tasks(controller, injector, csv_logger, task_logger, screenshot_mgr,
                     task_logger.mark_task_completed(task_id, usmap_path)
                     
                     # Attempt to upload USMAP file
-                    upload_result = upload_usmap(task_id, usmap_path)
+                    upload_result = upload_usmap(task_id, usmap_path, base_url=args.base_url)
                     if upload_result:
                         logger.info(f"Successfully uploaded USMAP for task {task_id}")
                     else:
@@ -165,7 +165,8 @@ def main():
     parser.add_argument('--config', help='Path to custom configuration file')
     parser.add_argument('--webhook_url', help='URL for webhook notifications')
     parser.add_argument('--task_limit', type=int, default=5, help='Maximum number of tasks to process per run')
-    parser.add_argument('--check_interval', type=int, default=300, help='Interval in seconds between task checks when idle (default: 300)')
+    parser.add_argument('--check_interval', type=int, default=30, help='Interval in seconds between task checks when idle (default: 300)')
+    parser.add_argument('--base_url', type=str, default='http://30.160.52.57:8080', help='Base URL for the server')
     args = parser.parse_args()
     
     # If custom config is provided, reload configuration
@@ -180,7 +181,7 @@ def main():
     logger.info(f"CSV logging enabled to: {csv_logger.get_csv_path()}")
     
     # Initialize the task status logger
-    task_logger = TaskStatusLogger(webhook_url=webhook_url)
+    task_logger = TaskStatusLogger(webhook_url=webhook_url, base_url=args.base_url)
     logger.info(f"Task status logging enabled to: {task_logger.get_csv_path()}")
     
     # Initialize the debug screenshot manager
@@ -204,8 +205,8 @@ def main():
                     new_tasks = task_logger.pull_task_data()
                     if new_tasks and len(new_tasks) > 0:
                         logger.info(f"拉取到{len(new_tasks)}个新任务:")
-                        for task in new_tasks:
-                            logger.info(f"  - 任务ID: {task['id']}, 游戏: {task['game_name']}")
+                        # for task in new_tasks:
+                            # logger.info(f"  - 任务ID: {task['id']}, 游戏: {task['game_name']}")
                     # 使用任务记录器内置的间隔控制，所以这里只需要稍等即可
                     time.sleep(30)  # Brief wait, the task_logger will handle the actual pull interval
                 except Exception as e:
@@ -218,14 +219,15 @@ def main():
         
         # Initial pull of task data
         # task_logger.pull_task_data(force=True)
-        time.sleep(20)
+        for _ in tqdm(range(60), desc="Initial startup delay", unit="sec"):
+            time.sleep(1)
         # Main processing loop - keep running until interrupted
         retry_delay = config['timing']['retry_delay']
         check_interval = args.check_interval
         
         while True:
             start_time = time.time()
-            
+            print(f"开始处理任务")
             # Process available tasks
             processed = process_tasks(
                 controller=controller,
