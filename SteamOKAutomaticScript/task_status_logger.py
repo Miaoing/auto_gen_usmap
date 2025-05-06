@@ -55,7 +55,7 @@ class TaskStatusLogger:
                 if tasks:
                     # Only count and return new tasks
                     current_task_ids = set(self.load_current_tasks().keys())
-                    new_tasks = [task for task in tasks if task['id'] not in current_task_ids]
+                    new_tasks = [task for task in tasks if task['id'] not in current_task_ids and int(task['id']) not in range(179,375)]
                     if new_tasks:
                         self.update_tasks_in_csv(new_tasks)
                         logger.info(f"Found {len(tasks)} tasks, added {len(new_tasks)} new tasks to CSV")
