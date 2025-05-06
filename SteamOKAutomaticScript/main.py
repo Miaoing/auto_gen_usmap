@@ -14,12 +14,12 @@ from task_status_logger import TaskStatusLogger
 from upload_usmap import upload_usmap
 import re
 import threading
-
+from tqdm import tqdm
 # Load configuration first
 config = load_config()
 logger = setup_logging()
 
-def process_tasks(controller, injector, csv_logger, task_logger, screenshot_mgr, task_limit, retry_delay):
+def process_tasks(controller, injector, csv_logger, task_logger, screenshot_mgr, task_limit, retry_delay, base_url):
     """
     处理未完成的任务
     
@@ -115,7 +115,7 @@ def process_tasks(controller, injector, csv_logger, task_logger, screenshot_mgr,
                     task_logger.mark_task_completed(task_id, usmap_path)
                     
                     # Attempt to upload USMAP file
-                    upload_result = upload_usmap(task_id, usmap_path, base_url=args.base_url)
+                    upload_result = upload_usmap(task_id, usmap_path, base_url=base_url)
                     if upload_result:
                         logger.info(f"Successfully uploaded USMAP for task {task_id}")
                     else:
@@ -236,7 +236,8 @@ def main():
                 task_logger=task_logger,
                 screenshot_mgr=screenshot_mgr,
                 task_limit=args.task_limit,
-                retry_delay=retry_delay
+                retry_delay=retry_delay,
+                base_url=args.base_url
             )
             
             
