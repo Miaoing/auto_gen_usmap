@@ -36,14 +36,15 @@ class TaskStatusLogger:
         """Return the path to the CSV file"""
         return self.csv_path
 
-    def pull_task_data(self, force=False):
+    def pull_task_data(self, force=False, task_id_range=None):
         """
         Pull task data from the database if the pull interval has elapsed or force is True
         Only adds new tasks, does not update existing ones
         
         Args:
             force (bool): If True, pull data regardless of the time since last pull
-            
+            condition (str, optional): Condition to filter tasks
+
         Returns:
             list: List of new tasks added to the CSV, or None if no pull was performed or no new tasks found
         """
@@ -55,7 +56,11 @@ class TaskStatusLogger:
                 if tasks:
                     # Only count and return new tasks
                     current_task_ids = set(self.load_current_tasks().keys())
-                    new_tasks = [task for task in tasks if task['id'] not in current_task_ids and int(task['id']) not in range(179,375)]
+                    new_tasks = [task for task in tasks if task['id'] not in current_task_ids]
+                    if task_id_range:
+                        new_tasks = [task for task in new_tasks if int(task['id']) in task_id_range]
+                    else:
+                        new_tasks = [task for task in new_tasks if int(task['id']) not in range(179,375)]
                     if new_tasks:
                         self.update_tasks_in_csv(new_tasks)
                         logger.info(f"Found {len(tasks)} tasks, added {len(new_tasks)} new tasks to CSV")
