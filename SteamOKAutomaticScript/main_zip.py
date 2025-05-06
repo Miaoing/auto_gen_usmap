@@ -14,6 +14,7 @@ from datetime import datetime
 # Third-party imports
 import psutil
 import pyautogui as pg
+from tqdm import tqdm
 
 # Local imports
 from logger import setup_logging
@@ -29,13 +30,12 @@ from upload_usmap import upload_usmap
 config = load_config()
 logger = setup_logging()
 
-def download_zip(task, mounted_folder, zip_name, output_path):
+def download_zip(task, source_path, output_path):
     """Copy the client package zip file from mounted folder
     
     Args:
         task: The task dictionary containing the task ID
-        mounted_folder: Path to the mounted folder containing zip files
-        zip_name: Name of the zip file to copy
+        source_path: Path to the source zip file
         output_path: Path where to save downloaded files
     """
     try:
@@ -44,14 +44,15 @@ def download_zip(task, mounted_folder, zip_name, output_path):
         # Create downloads directory if it doesn't exist
         download_dir = Path(output_path)
         download_dir.mkdir(exist_ok=True)
-        
+        zip_name = os.path.basename(source_path)
+
         # Use the provided zip name directly
-        source_path = os.path.join(mounted_folder, zip_name)
         dest_path = str(download_dir / zip_name)
-        
+
+        if os.path.exists(dest_path):
+            logger.info(f"文件已存在: {dest_path}")
+            return True
         # Set download path in task dictionary
-        task['zip_path'] = dest_path
-        
         logger.info(f"Copying package for task ID {task_id} from mounted folder")
         logger.info(f"Using file: {source_path}")
         
@@ -76,34 +77,52 @@ def download_zip(task, mounted_folder, zip_name, output_path):
         logger.error(f"Failed to copy zip for task {task['id']}: {str(e)}")
         return False
 
-def extract_zip(task, output_path, zip_name):
+def extract_zip(task, zip_path):
     """Extract the downloaded zip file"""
     try:
-        zip_path = os.path.join(output_path, zip_name)
-        extract_dir = Path(f"extracted_{task['id']}")
+        extract_dir = Path(zip_path.replace('.zip', ''))
+        if os.path.exists(extract_dir):
+            logger.info(f"文件已存在: {extract_dir}")
+            return True
         extract_dir.mkdir(exist_ok=True)
         
-        task['extract_folder'] = str(extract_dir)
-        
         logger.info(f"Extracting {zip_path} to {extract_dir}")
+        
+        # Measure extraction time
+        start_time = time.time()
         
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(extract_dir)
         
+        # Calculate extraction time
+        end_time = time.time()
+        extract_time = end_time - start_time
+        
+        # Get file size for reporting
+        zip_size = os.path.getsize(zip_path) / (1024 * 1024)  # Size in MB
+        
         logger.info(f"Extraction completed for task {task['id']}")
+        logger.info(f"Extraction statistics: {zip_size:.2f} MB in {extract_time:.2f} seconds ({zip_size/extract_time:.2f} MB/s)")
+        
+        # Store the extract folder in the task for later use
+        task['extract_folder'] = str(extract_dir)
+        
         return True
     except Exception as e:
         logger.error(f"Failed to extract zip for task {task['id']}: {str(e)}")
         return False
 
-def delete_zip_and_extract_folder(task, output_path, zip_name):
+def delete_zip_and_extract_folder(task, output_zip_path):
     """Clean up downloaded zip and extracted folder"""
     try:
-        zip_path = os.path.join(output_path, zip_name)
+        extract_folder = output_zip_path.replace('.zip', '')
+        if os.path.exists(extract_folder):
+            shutil.rmtree(extract_folder)
+            logger.info(f"Deleted extract folder: {extract_folder}")
         # Remove the zip file
-        if os.path.exists(zip_path):
-            os.remove(zip_path)
-            logger.info(f"Deleted zip file: {zip_path}")
+        if os.path.exists(output_zip_path):
+            os.remove(output_zip_path)
+            logger.info(f"Deleted zip file: {output_zip_path}")
         
         return True
     except Exception as e:
@@ -217,7 +236,7 @@ def check_anticheat(extract_folder):
         logger.error(f"Error checking for anti-cheat: {str(e)}")
         # If there's an error, we'll continue anyway but log it
         return False
-def batch_process_tasks(injector, csv_logger, task_logger, task_limit, retry_delay, mounted_folder, output_path, base_url):
+def batch_process_tasks(injector, csv_logger, task_logger, task_limit, retry_delay, output_path, base_url):
     unprocessed_tasks = task_logger.get_unprocessed_tasks(limit=task_limit)
     processed_count = 0
     if not unprocessed_tasks:
@@ -226,55 +245,55 @@ def batch_process_tasks(injector, csv_logger, task_logger, task_limit, retry_del
     logger.info(f"发现{len(unprocessed_tasks)}个未处理的任务，开始处理")
     for task in unprocessed_tasks:
         task_id = task['id']
-        task_id = 671970
-        zip_name = r'2099670_piratesjourney.zip'
+        zip_path = task['Zip_Path']
         game_name = task['Steam_Game_Name']
 
         logger.info(f"开始处理任务 {task_id}: {game_name}")
 
         # Mark task as processing
         task_logger.mark_task_processing(task_id)
-        process_task(task_id, mounted_folder, zip_name, output_path, base_url)
+        if process_task(task_id, zip_path, output_path, base_url, injector, csv_logger, task_logger, game_name):
+            logger.info(f"任务 {task_id} 处理成功, 删除相关文件")
+            output_zip_path = os.path.join(output_path, os.path.basename(zip_path))
+            delete_zip_and_extract_folder(task, output_zip_path)
         processed_count += 1
     return processed_count
 
-def process_task(task_id, mounted_folder=None, zip_name=None, output_path="downloads", base_url=None):
+def process_task(task_id, zip_path, output_folder, base_url, injector, csv_logger, task_logger, game_name):
     """Process a single task
     
     Args:
         task_id: The ID of the task to process
-        mounted_folder: Path to the mounted folder containing zip files
-        zip_name: Name of the zip file to use
-        output_path: Path where to save downloaded files
+        zip_path: Path to the zip file to process
+        output_folder: Path where to save downloaded files
     """
     task = {'id': task_id}
     logger.info(f"Processing task ID: {task_id}")
     
+    zip_name = os.path.basename(zip_path)
+    output_zip_path = os.path.join(output_folder, zip_name)
     try:
         # Step 1: Download zip
-        if not download_zip(task, mounted_folder, zip_name, output_path):
-            logger.error(f"Aborting task {task_id} due to download failure")
+        if not download_zip(task, zip_path, output_folder):
+            logger.error(f"Aborting task {task_id}: {zip_name} due to download failure")
             return False
         
         # Step 2: Extract zip
-        if not extract_zip(task, output_path, zip_name):
-            logger.error(f"Aborting task {task_id} due to extraction failure")
-            delete_zip_and_extract_folder(task, output_path, zip_name)
+        if not extract_zip(task, output_zip_path):
+            logger.error(f"Aborting task {task_id}: {zip_name} due to extraction failure")
             return False
         
         # Step 2.5: Check for anti-cheat systems
         logger.info("Step 2.5: Checking for anti-cheat systems")
-        extract_folder = f'{output_path}/extracted_{task_id}'
-        if has_anticheat(extract_folder):
-            logger.error(f"Aborting task {task_id} due to anti-cheat detection")
-            delete_zip_and_extract_folder(task, output_path, zip_name)
+        extract_folder = f'{output_folder}/{zip_name.replace('.zip', '')}'
+        if check_anticheat(extract_folder):
+            logger.error(f"Aborting task {task_id}: {zip_name} due to anti-cheat detection")
             return False
         
         # Step 3: Find executables
         exe_paths = find_exe(extract_folder)
         if not exe_paths:
-            logger.error(f"Aborting task {task_id} due to missing executable")
-            delete_zip_and_extract_folder(task, output_path, zip_name)
+            logger.error(f"Aborting task {task_id}: {zip_name} due to missing executable")
             return False
         
         # Step 4-7: Try each executable with complete workflow
@@ -282,6 +301,9 @@ def process_task(task_id, mounted_folder=None, zip_name=None, output_path="downl
         for exe_path in exe_paths:
             logger.info(f"===== Attempting full workflow with executable: {exe_path} =====")
             
+            # step 3.5: 记录当前进程
+            before_processes = injector.get_running_processes()
+
             # Step 4: Run the executable
             logger.info(f"Step 4: Running executable: {exe_path}")
             pid = run_exe(exe_path)
@@ -294,7 +316,8 @@ def process_task(task_id, mounted_folder=None, zip_name=None, output_path="downl
             # Step 5: Inject DLL
             logger.info(f"Step 5: Injecting DLL into process: {pid}")
             logger.info(f"Game {game_name} is playable, starting DLL injection process...")
-            inject_result = injector.run_injection_process_with_retry()
+            injector.game_folder = extract_folder
+            inject_result = injector.run_injection_process_with_retry(launch_from_steam=False, before_processes=before_processes)
             if inject_result["success"]:
                 usmap_path = inject_result["data"]
                 if usmap_path:  # If USMap path was found
@@ -321,7 +344,6 @@ def process_task(task_id, mounted_folder=None, zip_name=None, output_path="downl
                     logger.warning(f"DLL injection failed for executable: {exe_path}, trying next if available")
                     continue
             else:
-                logger.info(f"✅DLL injection successful for game: {game_name}, 📁 USMap path: {usmap_path}")
                 error_type = inject_result["error_type"]
                 error_data = inject_result["data"] if inject_result["data"] else "Unknown error"
 
@@ -343,9 +365,6 @@ def process_task(task_id, mounted_folder=None, zip_name=None, output_path="downl
                 logger.warning(f"DLL injection failed for executable: {exe_path}, trying next if available")
                 continue
                 
-        # Step 7: Clean up regardless of success
-        logger.info(f"Step 7: Cleaning up")
-        delete_zip_and_extract_folder(task, output_path, zip_name)
         
         if success:
             logger.info(f"Task {task_id} completed successfully")
@@ -353,12 +372,11 @@ def process_task(task_id, mounted_folder=None, zip_name=None, output_path="downl
         else:
             logger.error(f"Task {task_id} failed - all executables failed to complete the workflow")
             return False
+
     except Exception as e:
         logger.error(f"Error processing task {task_id}: {str(e)}")
         csv_logger.log_download_error(game_name, f"处理游戏时出错: {str(e)}")
         task_logger.mark_task_error(task_id, f"处理游戏时出错: {str(e)}")
-
-        delete_zip_and_extract_folder(task, output_path, zip_name)
         return False
 
 def main():
@@ -368,21 +386,23 @@ def main():
     parser.add_argument('--start', type=int, default=179, help='Starting task ID')
     parser.add_argument('--end', type=int, default=375, help='Ending task ID')
     parser.add_argument('--mounted-folder', type=str, default=r'G:/', help='Path to the mounted folder containing zip files')
-    parser.add_argument('--zip-name', type=str, required=True, help='Name of the zip file to use')
     parser.add_argument('--output-path', type=str, default=r'F:/extracted', help='Path where to save downloaded files')
     parser.add_argument('--delay', type=int, default=5, help='Delay in seconds between processing tasks')
     parser.add_argument('--base_url', type=str, default='http://30.160.52.57:8080', help='Base URL for the server')
     parser.add_argument('--webhook_url', default='https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=d2ae19b3-0efd-44ef-b1f8-c6af76b113b5', help='URL for webhook notifications')
     parser.add_argument('--csv_path', type=str, default='task_status_local_games.csv', help='Path to the CSV file for task status')
+    parser.add_argument('--check_interval', type=int, default=30, help='Interval in seconds between task checks when idle (default: 300)')
+    parser.add_argument('--task_limit', type=int, default=5, help='Maximum number of tasks to process per run')
 
     args = parser.parse_args()
     start_id = args.start
     end_id = args.end
     mounted_folder = args.mounted_folder
-    zip_name = args.zip_name
     output_path = args.output_path
     delay = args.delay
     webhook_url = args.webhook_url
+    task_limit = args.task_limit
+    base_url = args.base_url
     
     # Initialize the CSV logger
     csv_logger = GameStatusLogger(webhook_url=webhook_url)
@@ -402,7 +422,7 @@ def main():
         def pull_task_data_periodically():
             while True:
                 try:
-                    new_tasks = task_logger.pull_task_data(task_id_range=(start_id, end_id))
+                    new_tasks = task_logger.pull_task_data(task_id_range=range(start_id, end_id))
                     if new_tasks and len(new_tasks) > 0:
                         logger.info(f"拉取到{len(new_tasks)}个新任务:")
                     # 使用任务记录器内置的间隔控制，所以这里只需要稍等即可
@@ -415,9 +435,8 @@ def main():
         pull_thread = threading.Thread(target=pull_task_data_periodically, daemon=True)
         pull_thread.start()
 
-                # Initial pull of task data
         # task_logger.pull_task_data(force=True)
-        for _ in tqdm(range(60), desc="Initial startup delay", unit="sec"):
+        for _ in tqdm(range(30), desc="Initial startup delay", unit="sec"):
             time.sleep(1)
         # Main processing loop - keep running until interrupted
         retry_delay = config['timing']['retry_delay']
@@ -426,7 +445,7 @@ def main():
         while True:
             start_time = time.time()
             print(f"开始处理任务")
-            processed_count = batch_process_tasks(injector, csv_logger, task_logger, task_limit, retry_delay, mounted_folder, output_path, base_url)
+            processed = batch_process_tasks(injector, csv_logger, task_logger, task_limit, retry_delay, output_path, base_url)
             # If we processed tasks, don't wait as long before checking again
             if processed > 0:
                 logger.info(f"本次处理了 {processed} 个任务，30秒后检查新任务")
