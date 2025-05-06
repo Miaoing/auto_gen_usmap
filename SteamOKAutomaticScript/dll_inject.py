@@ -554,7 +554,7 @@ class DLLInjector:
             return {"success": False, "error_type": "exception", "data": str(e)}
 
         
-    def run_injection_process(self):
+    def run_injection_process(self, launch_from_steam=True, before_processes=None):
         """
         Full process: activate Steam window, detect playable button, click it, get game process, and inject DLL
         Returns a dictionary with:
@@ -568,16 +568,18 @@ class DLLInjector:
         else:
             logger.info("No game folder specified, will detect any new process")
         
-        if not self.activate_steam_window():
-            logger.error("Failed to activate Steam window")
-            return {"success": False, "error_type": "steam_window_activation_failed", "data": None}
-        
         logger.info("Recording processes before game launch...")
-        before_processes = self.get_running_processes()
-        
-        if not self.detect_and_click_playable():
-            logger.error("Failed to find and click playable button")
-            return {"success": False, "error_type": "playable_button_not_found", "data": None}
+        if before_processes is None:
+            before_processes = self.get_running_processes()
+
+        if launch_from_steam:
+            if not self.activate_steam_window():
+                logger.error("Failed to activate Steam window")
+                return {"success": False, "error_type": "steam_window_activation_failed", "data": None}
+
+            if not self.detect_and_click_playable():
+                logger.error("Failed to find and click playable button")
+                return {"success": False, "error_type": "playable_button_not_found", "data": None}
         
         # Define dialogs to check in order
         dialogs_to_check = [
@@ -617,14 +619,14 @@ class DLLInjector:
         return injection_result
 
 
-    def run_injection_process_with_retry(self, max_retries=3):
+    def run_injection_process_with_retry(self, max_retries=3, launch_from_steam=True, before_processes=None):
         """
         Run the injection process with retry logic
         """
         result = None
         for attempt in range(max_retries):
             logger.info(f"Injection Attempt {attempt + 1} of {max_retries}...")
-            result = self.run_injection_process()
+            result = self.run_injection_process(launch_from_steam, before_processes)
             
             if result["success"]:
                 return result
