@@ -5,16 +5,17 @@ import requests
 import zipfile
 import time
 import logging
+import argparse
+import re
+import threading
 from pathlib import Path
-import psutil
-import argparse
-
-import time
-import logging
-import argparse
-import os
 from datetime import datetime
+
+# Third-party imports
+import psutil
 import pyautogui as pg
+
+# Local imports
 from logger import setup_logging
 from game_install_controller import SteamOKController
 from dll_inject import DLLInjector
@@ -23,20 +24,10 @@ from csv_logger import GameStatusLogger
 from debug_screenshot_manager import DebugScreenshotManager
 from task_status_logger import TaskStatusLogger
 from upload_usmap import upload_usmap
-import re
-import threading
 
-
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler("zip_processor.log"),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger("ZipProcessor")
+# Load configuration first
+config = load_config()
+logger = setup_logging()
 
 def download_zip(task, mounted_folder, zip_name, output_path):
     """Copy the client package zip file from mounted folder
@@ -200,69 +191,48 @@ def run_exe(exe_path):
         logger.error(f"Failed to run executable: {str(e)}")
         return None
 
-def inject(pid):
-    """Inject DLL into the process"""
-    try:
-        if not pid:
-            logger.error("No valid PID provided for injection")
-            return None
-        
-        # Check if process is still running
-        if not psutil.pid_exists(pid):
-            logger.error(f"Process with PID {pid} no longer exists")
-            return None
-        
-        logger.info(f"Injecting DLL into process with PID: {pid}")
-        
-        # Path to your injector tool
-        injector_path = "path/to/injector.exe"  # Replace with actual path
-        dll_path = "path/to/injection.dll"      # Replace with actual path
-        
-        # Run the injector
-        result = subprocess.run([injector_path, str(pid), dll_path], 
-                                capture_output=True, text=True)
-        
-        if result.returncode != 0:
-            logger.error(f"Injection failed: {result.stderr}")
-            return None
-        
-        logger.info(f"Injection successful: {result.stdout}")
-        
-        # Look for USMap path in the output
-        # This depends on your injector's output format
-        usmap_path = None
-        # Parse the output to find usmap_path
-        
-        return usmap_path
-    except Exception as e:
-        logger.error(f"Injection error: {str(e)}")
-        return None
 
-def upload_usmap(task):
-    """Upload the USMap file to server"""
+def check_anticheat(extract_folder):
+    """Check for anti-cheat systems in the extracted folder
+    
+    Args:
+        extract_folder: Path to the folder containing extracted files
+        
+    Returns:
+        bool
+    """
     try:
-        if 'usmap_path' not in task or not task['usmap_path']:
-            logger.error(f"No USMap path available for task {task['id']}")
-            return False
+        logger.info(f"Scanning for anti-cheat systems in: {extract_folder}")
         
-        usmap_path = task['usmap_path']
-        task_id = task['id']
+        # Check for EasyAntiCheat folder
+        eac_folder = os.path.join(extract_folder, 'EasyAntiCheat')
+        if os.path.exists(eac_folder) and os.path.isdir(eac_folder):
+            logger.warning(f"⚠️ EasyAntiCheat folder detected in: {extract_folder}")
+            return True
         
-        logger.info(f"Uploading USMap for task {task_id}: {usmap_path}")
-        
-        # API endpoint for upload
-        upload_url = f"https://api-endpoint.example.com/upload/{task_id}"  # Replace with actual API endpoint
-        
-        with open(usmap_path, 'rb') as f:
-            files = {'file': f}
-            response = requests.post(upload_url, files=files)
-            response.raise_for_status()
-        
-        logger.info(f"USMap upload successful for task {task_id}")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to upload USMap for task {task['id']}: {str(e)}")
+        # No anti-cheat detected
+        logger.info("No anti-cheat systems detected")
         return False
+    except Exception as e:
+        logger.error(f"Error checking for anti-cheat: {str(e)}")
+        # If there's an error, we'll continue anyway but log it
+        return False
+def batch_process_tasks(injector, csv_logger, task_logger, task_limit, retry_delay):
+    unprocessed_tasks = task_logger.get_unprocessed_tasks(limit=task_limit)
+    processed_count = 0
+    if not unprocessed_tasks:
+        logger.info("没有发现未处理的任务，等待下一次检查")
+        return 0
+    logger.info(f"发现{len(unprocessed_tasks)}个未处理的任务，开始处理")
+    for task in unprocessed_tasks:
+        task_id = task['id']
+        game_name = task['Steam_Game_Name']
+        logger.info(f"开始处理任务 {task_id}: {game_name}")
+
+        # Mark task as processing
+        task_logger.mark_task_processing(task_id)
+        process_task(task_id, mounted_folder, zip_name, output_path)
+
 
 def process_task(task_id, mounted_folder=None, zip_name=None, output_path="downloads"):
     """Process a single task
@@ -288,8 +258,16 @@ def process_task(task_id, mounted_folder=None, zip_name=None, output_path="downl
             delete_zip_and_extract_folder(task, output_path, zip_name)
             return False
         
+        # Step 2.5: Check for anti-cheat systems
+        logger.info("Step 2.5: Checking for anti-cheat systems")
+        extract_folder = f'{output_path}/extracted_{task_id}'
+        if has_anticheat(extract_folder):
+            logger.error(f"Aborting task {task_id} due to anti-cheat detection")
+            delete_zip_and_extract_folder(task, output_path, zip_name)
+            return False
+        
         # Step 3: Find executables
-        exe_paths = find_exe(task['extract_folder'])
+        exe_paths = find_exe(extract_folder)
         if not exe_paths:
             logger.error(f"Aborting task {task_id} due to missing executable")
             delete_zip_and_extract_folder(task, output_path, zip_name)
@@ -311,27 +289,56 @@ def process_task(task_id, mounted_folder=None, zip_name=None, output_path="downl
             
             # Step 5: Inject DLL
             logger.info(f"Step 5: Injecting DLL into process: {pid}")
-            usmap_path = inject(pid)
-            if not usmap_path:
+            logger.info(f"Game {game_name} is playable, starting DLL injection process...")
+            inject_result = injector.run_injection_process_with_retry()
+            if inject_result["success"]:
+                usmap_path = inject_result["data"]
+                if usmap_path:  # If USMap path was found
+                    logger.info(f"✅DLL injection successful for game: {game_name}, 📁 USMap path: {usmap_path}")
+                    csv_logger.log_injection_success(game_name, usmap_path, log_dir)
+
+                    # Mark task as completed and store USMAP path
+                    task_logger.mark_task_completed(task_id, usmap_path)
+
+                    # Attempt to upload USMAP file
+                    upload_result = upload_usmap(task_id, usmap_path, base_url=args.base_url)
+
+                    if upload_result:
+                        logger.info(f"Successfully uploaded USMAP for task {task_id}")
+                    else:
+                        logger.error(f"Failed to upload USMAP for task {task_id}")
+                        
+                    print(f"{game_name}: ✅可玩, 💉已注入DLL, 📁USMap路径: {usmap_path}")
+                                # If we reach here, all steps were successful
+                    success = True
+                    logger.info(f"Full workflow successful with executable: {exe_path}")
+                    break
+                else:
+                    logger.warning(f"DLL injection failed for executable: {exe_path}, trying next if available")
+                    continue
+            else:
+                logger.info(f"✅DLL injection successful for game: {game_name}, 📁 USMap path: {usmap_path}")
+                error_type = inject_result["error_type"]
+                error_data = inject_result["data"] if inject_result["data"] else "Unknown error"
+
+                if error_type == "timeout":
+                    logger.error(f"DLL injection timed out for game: {game_name}")
+                    csv_logger.log_injection_timeout(game_name, log_dir)
+                    task_logger.mark_task_error(task_id, "DLL injection timed out")
+                    print(f"{game_name}: 可玩, DLL注入超时")
+                elif error_type == "game_crashed":
+                    logger.error(f"Game crashed during injection: {game_name}")
+                    csv_logger.log_injection_crash(game_name, "Game process crashed", log_dir)
+                    task_logger.mark_task_error(task_id, "Game crashed during DLL injection")
+                    print(f"{game_name}: 可玩, DLL注入时游戏崩溃")
+                else:
+                    logger.error(f"DLL injection failed for game: {game_name}, error type: {error_type}, details: {error_data}")
+                    csv_logger.log_injection_crash(game_name, f"Injection failed: {error_type}", log_dir)
+                    task_logger.mark_task_error(task_id, f"DLL injection failed: {error_type}")
+                    print(f"{game_name}: 可玩, 注入DLL失败 ({error_type})")
                 logger.warning(f"DLL injection failed for executable: {exe_path}, trying next if available")
                 continue
-            
-            task['usmap_path'] = usmap_path
-            logger.info(f"DLL injection successful, USMap path: {usmap_path}")
-            
-            # Step 6: Upload USMap
-            logger.info(f"Step 6: Uploading USMap file")
-            if not upload_usmap(task):
-                logger.warning(f"USMap upload failed for executable: {exe_path}, trying next if available")
-                continue
-            
-            logger.info(f"USMap upload successful for executable: {exe_path}")
-            
-            # If we reach here, all steps were successful
-            success = True
-            logger.info(f"Full workflow successful with executable: {exe_path}")
-            break
-        
+                
         # Step 7: Clean up regardless of success
         logger.info(f"Step 7: Cleaning up")
         delete_zip_and_extract_folder(task, output_path, zip_name)
@@ -344,6 +351,9 @@ def process_task(task_id, mounted_folder=None, zip_name=None, output_path="downl
             return False
     except Exception as e:
         logger.error(f"Error processing task {task_id}: {str(e)}")
+        csv_logger.log_download_error(game_name, f"处理游戏时出错: {str(e)}")
+        task_logger.mark_task_error(task_id, f"处理游戏时出错: {str(e)}")
+
         delete_zip_and_extract_folder(task, output_path, zip_name)
         return False
 
@@ -351,12 +361,23 @@ def main():
     """Process all tasks in the specified range"""
     # Set up command line argument parsing
     parser = argparse.ArgumentParser(description='Process tasks for USMap generation')
-    parser.add_argument('--start', type=int, default=174, help='Starting task ID')
-    parser.add_argument('--end', type=int, default=376, help='Ending task ID')
-    parser.add_argument('--mounted-folder', type=str, required=True, help='Path to the mounted folder containing zip files')
+    parser.add_argument('--start', type=int, default=179, help='Starting task ID')
+    parser.add_argument('--end', type=int, default=375, help='Ending task ID')
+    parser.add_argument('--mounted-folder', type=str, default=r'G:/', help='Path to the mounted folder containing zip files')
     parser.add_argument('--zip-name', type=str, required=True, help='Name of the zip file to use')
-    parser.add_argument('--output-path', type=str, default='downloads', help='Path where to save downloaded files')
+    parser.add_argument('--output-path', type=str, default=r'F:/extracted', help='Path where to save downloaded files')
     parser.add_argument('--delay', type=int, default=5, help='Delay in seconds between processing tasks')
+    parser.add_argument('--base_url', type=str, default='http://30.160.52.57:8080', help='Base URL for the server')
+    parser.add_argument('--webhook_url', default='https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=d2ae19b3-0efd-44ef-b1f8-c6af76b113b5', help='URL for webhook notifications')
+    parser.add_argument('--csv_path', type=str, default='task_status_local_games.csv', help='Path to the CSV file for task status')
+    # Initialize the CSV logger
+    webhook_url = args.webhook_url
+    csv_logger = GameStatusLogger(webhook_url=webhook_url)
+    logger.info(f"CSV logging enabled to: {csv_logger.get_csv_path()}")
+
+    # Initialize the task status logger
+    task_logger = TaskStatusLogger(webhook_url=webhook_url, base_url=args.base_url, csv_path=args.csv_path)
+    logger.info(f"Task status logging enabled to: {task_logger.get_csv_path()}")
     
     args = parser.parse_args()
     start_id = args.start
@@ -365,26 +386,42 @@ def main():
     zip_name = args.zip_name
     output_path = args.output_path
     delay = args.delay
-    
-    logger.info(f"Starting batch processing for task IDs {start_id} to {end_id}")
-    logger.info(f"Using mounted folder: {mounted_folder}")
-    logger.info(f"Using zip file: {zip_name}")
-    logger.info(f"Using output path: {output_path}")
-    
-    for task_id in range(start_id, end_id + 1):
-        logger.info(f"=== Processing task ID: {task_id} ===")
-        success = process_task(task_id, mounted_folder, zip_name, output_path)
+
+    # Run the normal game installation process
+    try:
+        logger.info("破解游戏脚本启动中...")
+        injector = DLLInjector()
         
-        if success:
-            logger.info(f"Task {task_id} completed successfully")
-        else:
-            logger.error(f"Task {task_id} failed")
         
-        # Add a delay between tasks to avoid overwhelming resources
-        logger.info(f"Waiting {delay} seconds before next task...")
-        time.sleep(delay)
-    
-    logger.info("Batch processing completed")
+        # Setup a thread for periodic task data pulling
+        def pull_task_data_periodically():
+            while True:
+                try:
+                    new_tasks = task_logger.pull_task_data(task_id_range=(start_id, end_id))
+                    if new_tasks and len(new_tasks) > 0:
+                        logger.info(f"拉取到{len(new_tasks)}个新任务:")
+                    # 使用任务记录器内置的间隔控制，所以这里只需要稍等即可
+                    time.sleep(30)  # Brief wait, the task_logger will handle the actual pull interval
+                except Exception as e:
+                    logger.error(f"任务拉取线程出错: {str(e)}")
+                    time.sleep(60)  # Wait a minute before r
+
+        # Start the periodic task pull thread
+        pull_thread = threading.Thread(target=pull_task_data_periodically, daemon=True)
+        pull_thread.start()
+
+                # Initial pull of task data
+        # task_logger.pull_task_data(force=True)
+        for _ in tqdm(range(60), desc="Initial startup delay", unit="sec"):
+            time.sleep(1)
+        # Main processing loop - keep running until interrupted
+        retry_delay = config['timing']['retry_delay']
+        check_interval = args.check_interval
+
+        while True:
+            start_time = time.time()
+            print(f"开始处理任务")
+
 
 if __name__ == '__main__':
     main()
