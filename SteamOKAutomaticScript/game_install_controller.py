@@ -60,7 +60,9 @@ class SteamOKController:
         self.steamok_confirm_play_button_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steamok_confirm_play_button_image'])
         self.steamok_not_use_save_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steamok_not_use_save_image'])
         self.steam_install_button_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steam_install_button_image'])
+        self.steam_install_button_image2 = os.path.join(os.path.dirname(__file__), self.game_controller_config['steam_install_button_image2'])
         self.steam_reinstall_button_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steam_reinstall_button_image'])
+        self.steam_reinstall_button_image2 = os.path.join(os.path.dirname(__file__), self.game_controller_config['steam_reinstall_button_image2'])
         self.steam_accept_button_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steam_accept_button_image'])
         self.image_detector = ImageDetector(self.config)
         
@@ -296,8 +298,10 @@ class SteamOKController:
                 self.downloading_folders_before_install = set()
             
             install_button_image = self.steam_install_button_image
+            install_button_image2 = self.steam_install_button_image2
             reinstall_button_image = self.steam_reinstall_button_image
-            
+            reinstall_button_image2 = self.steam_reinstall_button_image2
+
             logger.debug("Searching for install/reinstall buttons...")
             install_button_location = None
             reinstall_button_location = None
@@ -306,12 +310,20 @@ class SteamOKController:
                 install_button_location = pg.locateOnScreen(install_button_image, confidence=0.9)
             except Exception as e:
                 logger.warning("Install button not found, will retry later")
+                try:
+                    install_button_location = pg.locateOnScreen(install_button_image2, confidence=0.9)
+                except Exception as e:
+                    logger.warning("Install button2 not found")
 
             if install_button_location is None:
                 try:
                     reinstall_button_location = pg.locateOnScreen(reinstall_button_image, confidence=0.9)
                 except Exception as e:
-                    logger.debug("Reinstall button not found")
+                    logger.warning("Reinstall button not found")
+                    try:
+                        reinstall_button_location = pg.locateOnScreen(reinstall_button_image2, confidence=0.9)
+                    except Exception as e:
+                        logger.warning("Reinstall button2 not found")
                 
                 time.sleep(2)
                 

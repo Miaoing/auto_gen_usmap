@@ -1,1 +1,74 @@
 id,Steam_Game_Name,Status,USMap_Path,Error_Detail,Last_Updated
+114,The Front,error,,"step 3: E105 FModel err: E105: Need usmap, aes:0x25DF4B66CD7E2BDC301ADEE8308E362CC8B12D680BD0135BF5E83FED5E5A0876,ue_ver:268435888,version_string:4.27.2.0",2025-05-06 10:26:32
+115,Beyond The Wire,error,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 10:21:29
+117,Grand Emprise: Time Travel Survival,error,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 10:21:29
+168,VEILED EXPERTS,error,,DLL injection failed: playable_button_not_found,2025-05-06 12:04:10
+1278,Little Nightmares,completed,C:/Dumper-7\4.24.2-0+++UE4+Release-4.24-Helios\Mappings\4.24.2-0+++UE4+Release-4.24-Helios.usmap,,2025-05-06 13:22:49
+1336,Final Fantasy III (3D Remake),error,,play_button_click_failed: Failed to click play button,2025-05-06 13:07:18
+1340,The First Descendant,error,,play_button_click_failed: Failed to click play button,2025-05-06 13:27:46
+1361,Lies of P,completed,C:/Dumper-7\4.27.2-0+Frontline-LiesofP\Mappings\4.27.2-0+Frontline-LiesofP.usmap,"step 3: E105 FModel err: E105: Need usmap, aes:0x9140E4AFF909A85DC0F4E6E45CD5012058F39D60C7EE2BAB1DB05D85668EE53B,ue_ver:268435888,version_string:4.27.2.0",2025-05-06 15:30:28
+1363,DoDodge2020,error,,play_button_click_failed: Failed to click play button,2025-05-06 15:30:51
+1373,Final Fantasy III (3D Remake),error,,play_button_click_failed: Failed to click play button,2025-05-06 15:31:18
+1374,Starship Troopers: Extermination,error,,EasyAntiCheat detected: EasyAntiCheat detected in game files,2025-05-06 15:46:17
+1378,Night of the Dead,error,,体验人数过多无法下载,2025-05-06 15:46:22
+1379,Sengoku Dynasty,error,,Game crashed during DLL injection,2025-05-06 16:18:10
+1382,Bloodhound,error,,play_button_click_failed: Failed to click play button,2025-05-06 16:18:37
+1383,Dark and Darker,error,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1390,Layers of Fear,error,,Game crashed during DLL injection,2025-05-06 17:05:54
+1397,Peekaboo,error,,max_attempts_reached: Timeout: Failed to complete installation after 10 attempts,2025-05-06 17:09:08
+1401,6120,error,,play_button_click_failed: Failed to click play button,2025-05-06 17:09:34
+1406,Starsiege: Deadzone,error,,EasyAntiCheat detected: EasyAntiCheat detected in game files,2025-05-06 17:31:39
+1413,"Love, Sam",completed,C:/Dumper-7\5.0.3-20979098+++UE5+Release-5.0-LoveSamRewrite\Mappings\5.0.3-20979098+++UE5+Release-5.0-LoveSamRewrite.usmap,play_button_click_failed: Failed to click play button,2025-05-06 17:51:41
+1415,Only Up!,error,,Game crashed during DLL injection,2025-05-06 18:07:22
+1417,LOCKDOWN Protocol,error,,play_button_click_failed: Failed to click play button,2025-05-06 18:07:47
+1419,Jusant,error,,play_button_click_failed: Failed to click play button,2025-05-06 18:08:11
+1422,RoboCop: Rogue City,error,,Game crashed during DLL injection,2025-05-06 19:34:34
+1423,10MINUTES,error,,play_button_click_failed: Failed to click play button,2025-05-06 19:35:29
+1424,Live with Mary,error,,play_button_click_failed: Failed to click play button,2025-05-06 19:35:53
+1426,Ultimate General: Civil War,processing,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 19:35:59
+1427,HORROR TALES: The Beggar,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1431,Western Redemption,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1441,369,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1445,Interregnum: False Prophet,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1456,Robin Hood - Sherwood Builders,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1458,The Casting of Frank Stone™,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1459,Until Dawn™,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1460,Mortal Online 2,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1469,Contain,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1472,Master Detective Archives: RAIN CODE Plus,unprocessed,,"step 3: E105 FModel err: E105: Need usmap, ue_ver:268435888,version_string:4.27.2.0",2025-05-06 16:21:09
+1479,Dead Matter,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1482,A Quiet Place: The Road Ahead,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1488,Outpost: Infinity Siege,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1498,Incursion Red River,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1508,Funko Fusion,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1512,8minSurvival,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1515,INFERNIUM,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1516,Project L33T,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1518,Brothers: A Tale of Two Sons Remake,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1519,Only Up!,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1525,My Island,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1533,EVERSPACE™ 2,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1535,Amigo: Kebab Simulator,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1537,MechWarrior 5: Clans,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1538,The Cursed Tape,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1539,SAND LAND,unprocessed,,"step 3: E105 FModel err: E105: Need usmap, ue_ver:268435888,version_string:4.27.2.0",2025-05-06 16:21:09
+1544,KeepUp Survival,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1545,Pine Harbor,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1548,Bellwright,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1555,Inside the Labs,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1556,Supernatural,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1559,TRYP FPV : The Drone Racer Simulator,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1560,R-Type Final 2,unprocessed,,"step 3: step 3: still cannot find after tested with versions: ['4.28', '4.27', '4.26', '4.25', '4.24', '4.23', '4.22', '4.21', '4.20', '4.19', '4.18', '4.17', '4.16', '4.15', '4.14', '4.13', '4.12', '4.11', '4.10', '4.9', '4.8', '4.7', '4.6', '4.5', '4.4', '4.3', '4.2', '4.1', '4.0'] first exception is E105 FModel err: E105: Need usmap, aes:0xFB97EBE9991B3E771C89F195B40F64DF001344971D7504D05B4EEF734B37B4CE,ue_ver:268435904,version_string:4.28",2025-05-06 16:21:09
+1561,Overboss,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1563,PARANOID,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1565,The Hopebringer,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1567,Creatures of Ava,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1568,Nexus PI,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1571,BIGFOOT,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1594,Fossilfuel 2,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1596,Machine Runaway,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1598,Shadow Corridor 2 雨ノ四葩,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1600,Oddsparks: An Automation Adventure,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1603,Chivalry 2,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1622,Dwarven Realms,unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
+1818,Mass Effect (2007),unprocessed,,"step 1: Stop because game requires us_map, provide us_map to continue",2025-05-06 16:21:09
