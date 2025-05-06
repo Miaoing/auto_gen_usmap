@@ -86,8 +86,8 @@ def activate_window_by_title(window_title, sleep_config):
         time.sleep(sleep_config.get('window_activate_delay'))
         
         # Click near the top of the window to ensure it's focused
-        pg.click((target_window.left + target_window.right)//2, target_window.top + 10)
-        time.sleep(sleep_config.get('click_delay'))
+        # pg.click((target_window.left + target_window.right)//2, target_window.top + 10)
+        # time.sleep(sleep_config.get('click_delay'))
         
         logger.info(f"{window_title} window activated successfully")
         return True
@@ -112,8 +112,6 @@ def activate_window(window_name, sleep_config):
     """
     logger.info(f"Attempting to activate {window_name} window...")
     # Show desktop first by sending Windows+D
-    pg.hotkey('win', 'd')
-    time.sleep(0.5)
     max_attempts = 3
     for attempt in range(max_attempts):
         try:
@@ -127,7 +125,9 @@ def activate_window(window_name, sleep_config):
         # If activation by title failed, try the typing method
         logger.info(f"Falling back to typing method for {window_name}")
         activate_window_by_typing(window_name, sleep_config)
-        logger.info(f"Try to activate {window_name} window by typing")
+        
+        pg.hotkey('win', 'd')
+        time.sleep(0.5)
 
     # If both methods failed
     logger.error(f"Failed to activate {window_name} window by any method")
