@@ -59,6 +59,8 @@ class SteamOKController:
         self.steamok_play_button_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steamok_play_button_image'])
         self.steamok_confirm_play_button_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steamok_confirm_play_button_image'])
         self.steamok_not_use_save_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steamok_not_use_save_image'])
+        self.steamok_start_game_step_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steamok_start_game_step_image'])
+        
         self.steam_install_button_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steam_install_button_image'])
         self.steam_install_button_image2 = os.path.join(os.path.dirname(__file__), self.game_controller_config['steam_install_button_image2'])
         self.steam_reinstall_button_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steam_reinstall_button_image'])
@@ -281,6 +283,27 @@ class SteamOKController:
         except Exception as e:
             logger.error(f"Error confirming start game")
             return False
+
+    def find_start_game_step(self):
+        max_attempts = 5
+        attempts = 0
+        while attempts < max_attempts:
+            """检查并点击确认按钮"""
+            try:
+                # 尝试通过OCR识别确认按钮
+                start_game_step_image = self.steamok_start_game_step_image
+                start_game_step_location = pg.locateOnScreen(start_game_step_image, confidence=0.9)  # 提高精度
+
+                if start_game_step_location:
+                    logger.info("找到[启动游戏步骤]")
+                    return True
+
+            except Exception as e:
+                logger.warning(f"[启动游戏步骤] not found after {attempts} attempts")
+            attempts += 1
+            time.sleep(1)
+        logger.error("[启动游戏步骤] not found after 3 attempts")
+        return False
 
     def click_install_button(self):
         """点击安装按钮"""
@@ -627,7 +650,7 @@ class SteamOKController:
     def check_and_click_save_button(self):
         """Check for and click the 'Save' button if it appears"""
         logger.info("Checking for 'Save' button...")
-        result = self.image_detector.check_and_click_image(image_path=self.steamok_save_image)
+        result = self.image_detector.check_and_click_image(image_path=self.steamok_save_image, max_retries=2)
         
         if result:
             logger.info("'Save' button found and clicked successfully")
@@ -705,7 +728,7 @@ class SteamOKController:
             
             # Check for and click "Save" button if it appears
             if self.check_and_click_save_button():
-                time.sleep(1.5)
+                time.sleep(0.5)
             
             if not self.search_game(game_name):
                 error_msg = "Failed to search game"
@@ -739,7 +762,12 @@ class SteamOKController:
             if self.screenshot_mgr:
                 self.screenshot_mgr.take_screenshot(game_name, "after_start_game", min_interval_seconds=0)
 
-            time.sleep(5)
+            if not self.find_start_game_step():
+                error_msg = "Failed to find start game step"
+                logger.error(f"{error_msg} for game: {game_name}")
+                self._handle_game_error(game_name, error_msg)
+                return {"success": False, "error_type": "当前体验人数过多-不可玩", "data": error_msg}
+            
             # Start cleanup operation in a separate thread during wait time
             self.clean_complete = False
             if CLEANER_AVAILABLE and self.cleaning_enabled and not self.clean_thread:
