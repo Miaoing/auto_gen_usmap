@@ -66,6 +66,10 @@ class SteamOKController:
         self.steam_reinstall_button_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steam_reinstall_button_image'])
         self.steam_reinstall_button_image2 = os.path.join(os.path.dirname(__file__), self.game_controller_config['steam_reinstall_button_image2'])
         self.steam_accept_button_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steam_accept_button_image'])
+        self.steam_downloading_image = os.path.join(os.path.dirname(__file__), self.game_controller_config['steam_downloading_image'])
+        self.steam_downloading_image2 = os.path.join(os.path.dirname(__file__), self.game_controller_config['steam_downloading_image2'])
+        
+        
         self.image_detector = ImageDetector(self.config)
         
         # Installation timeout from config
@@ -579,6 +583,34 @@ class SteamOKController:
                     continue
 
                 try:
+                    try:
+                        downloading_location = pg.locateOnScreen(self.steam_downloading_image, confidence=0.9)
+                        logger.info("检测到正在下载图标1")
+                    except Exception as e:
+                        try:
+                            downloading_location = pg.locateOnScreen(self.steam_downloading_image2, confidence=0.9)
+                            logger.info("检测到正在下载图标2")
+                        except Exception as e:
+                            downloading_location = None
+                    if downloading_location:
+                        time.sleep(10)
+                        continue
+                    # 检测两遍下载图片以防万一
+                    time.sleep(20)
+                    
+                    try:
+                        downloading_location = pg.locateOnScreen(self.steam_downloading_image, confidence=0.9)
+                        logger.info("检测到正在下载图标1")
+                    except Exception as e:
+                        try:
+                            downloading_location = pg.locateOnScreen(self.steam_downloading_image2, confidence=0.9)
+                            logger.info("检测到正在下载图标2")
+                        except Exception as e:
+                            downloading_location = None
+                    if downloading_location:
+                        logger.info("检测到正在下载图标")
+                        time.sleep(10)
+                        continue
                     # 同时检测两个图标
                     playable2_location = None
                     playable_location = None
@@ -604,7 +636,12 @@ class SteamOKController:
                         elapsed_min = elapsed_time / 60
                         logger.info(f"✅ 检测到安装完成，用时 {elapsed_min:.1f} 分钟")
                         return True
-
+                    else:
+                        logger.info("未检测到安装完成图标")
+                        logger.error(f"下载已完成，但是未检测到开始游戏按钮")
+                        if self.screenshot_mgr and game_name:
+                            self.screenshot_mgr.take_screenshot(game_name, f"download_complete_but_no_start_game_button", min_interval_seconds=1200)
+                        return False
                 except Exception as e:
                     if should_log and check_count > 12:  # Only log after 2 minutes
                         logger.debug(f"图像识别失败: {str(e)}")
