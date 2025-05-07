@@ -140,7 +140,7 @@ class TaskStatusLogger:
                     'Zip_Size': str(zip_size) if zip_size is not None else '',
                     'Status': 'unprocessed',
                     'USMap_Path': '',
-                    'Error_Detail': task.get('info', ''),
+                    'Error_Detail': '',
                     'Last_Updated': timestamp
                 }
                 
