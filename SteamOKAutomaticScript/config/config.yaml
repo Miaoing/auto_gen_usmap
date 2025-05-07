@@ -56,6 +56,8 @@ game_controller:
   steam_reinstall_button_image: "png/steam_reinstall_button.png"
   steam_reinstall_button_image2: "png/steam_reinstall_button2.png"
   steam_accept_button_image: "png/steam_accept_button.png"
+  steam_downloading_image: "png/steam_downloading.png"
+  steam_downloading_image2: "png/steam_downloading2.png"
 # DLL Injection
 dll_injection:
   enabled: true  # Whether to perform DLL injection
