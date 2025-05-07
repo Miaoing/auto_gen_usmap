@@ -430,7 +430,7 @@ def main():
         def pull_task_data_periodically():
             while True:
                 try:
-                    new_tasks = task_logger.pull_task_data(task_id_range=range(start_id, end_id))
+                    new_tasks = task_logger.pull_task_data(task_id_list=None)
                     if new_tasks and len(new_tasks) > 0:
                         logger.info(f"拉取到{len(new_tasks)}个新任务:")
                     # 使用任务记录器内置的间隔控制，所以这里只需要稍等即可
