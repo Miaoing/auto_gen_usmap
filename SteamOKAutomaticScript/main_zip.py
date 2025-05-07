@@ -298,27 +298,31 @@ def process_task(task_id, zip_path, output_folder, base_url, injector, csv_logge
         
         # Step 4-7: Try each executable with complete workflow
         success = False
+        max_injection_retries = 3
         for exe_path in exe_paths:
             logger.info(f"===== Attempting full workflow with executable: {exe_path} =====")
-            
-            # step 3.5: 记录当前进程
-            before_processes = injector.get_running_processes()
-
-            # Step 4: Run the executable
-            logger.info(f"Step 4: Running executable: {exe_path}")
-            pid = run_exe(exe_path)
-            if not pid:
-                logger.warning(f"Failed to run executable: {exe_path}, trying next if available")
-                continue
-            
-            logger.info(f"Successfully started executable: {exe_path} with PID: {pid}")
-            
-            # Step 5: Inject DLL
-            logger.info(f"Step 5: Injecting DLL into process: {pid}")
-            logger.info(f"Game {game_name} is playable, starting DLL injection process...")
-            injector.game_folder = extract_folder
-            inject_result = injector.run_injection_process_with_retry(launch_from_steam=False, before_processes=before_processes)
-            
+            # Initialize inject_result to prevent "cannot access local variable" error
+            inject_result = {"success": False, "error_type": "not_attempted", "data": None}
+            for attempt in range(max_injection_retries):
+                logger.info(f"Attempt {attempt + 1} of {max_injection_retries}...")
+                # Step 4: Run the executable
+                logger.info(f"Step 4: Running executable: {exe_path}")
+                pid = run_exe(exe_path)
+                if not pid:
+                    logger.warning(f"Failed to run executable: {exe_path}, trying next if available")
+                    continue
+                
+                logger.info(f"Successfully started executable: {exe_path} with PID: {pid}")
+                
+                # Step 5: Inject DLL
+                logger.info(f"Step 5: Injecting DLL into process: {pid}")
+                logger.info(f"Game {game_name} is playable, starting DLL injection process...")
+                injector.game_folder = extract_folder
+                inject_result = injector.run_injection_process(launch_from_steam=False, pid=pid)
+                if inject_result["success"]:
+                    break
+                else:
+                    logger.error(f"Injection failed: {inject_result['error_type']}")
             # Get the latest log directory if available
             log_dir = None
             if hasattr(injector, 'latest_log_dir') and injector.latest_log_dir:
@@ -430,7 +434,7 @@ def main():
         def pull_task_data_periodically():
             while True:
                 try:
-                    new_tasks = task_logger.pull_task_data(task_id_range=range(start_id, end_id))
+                    new_tasks = task_logger.pull_task_data(task_id_list=None)
                     if new_tasks and len(new_tasks) > 0:
                         logger.info(f"拉取到{len(new_tasks)}个新任务:")
                     # 使用任务记录器内置的间隔控制，所以这里只需要稍等即可

@@ -26,7 +26,7 @@ class TaskStatusLogger:
         if not os.path.exists(self.csv_path):
             with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=[
-                    'id', 'Steam_Game_Name', 'Zip_Path', 'Status', 'USMap_Path', 
+                    'id', 'Steam_Game_Name', 'Zip_Path', 'Zip_Size', 'Status', 'USMap_Path', 
                     'Error_Detail', 'Last_Updated'
                 ])
                 writer.writeheader()
@@ -36,7 +36,29 @@ class TaskStatusLogger:
         """Return the path to the CSV file"""
         return self.csv_path
 
-    def pull_task_data(self, force=False, task_id_range=None):
+    def get_zip_file_size(self, zip_path):
+        """
+        Get the size of a zip file in MB
+        
+        Args:
+            zip_path (str): Path to the zip file
+            
+        Returns:
+            float: Size of the zip file in MB, or None if file not found
+        """
+        try:
+            if not os.path.exists(zip_path):
+                logger.warning(f"Zip file not found: {zip_path}")
+                return None
+                
+            size_bytes = os.path.getsize(zip_path)
+            size_mb = size_bytes / (1024 * 1024)  # Convert to MB
+            return round(size_mb, 2)  # Round to 2 decimal places
+        except Exception as e:
+            logger.error(f"Error getting zip file size: {str(e)}")
+            return None
+
+    def pull_task_data(self, force=False, task_id_list=None):
         """
         Pull task data from the database if the pull interval has elapsed or force is True
         Only adds new tasks, does not update existing ones
@@ -62,10 +84,10 @@ class TaskStatusLogger:
                     # Only count and return new tasks
                     current_task_ids = set(self.load_current_tasks().keys())
                     new_tasks = [task for task in tasks if task['id'] not in current_task_ids]
-                    if task_id_range:
-                        new_tasks = [task for task in new_tasks if int(task['id']) in task_id_range]
+                    if task_id_list:
+                        new_tasks = [task for task in new_tasks if int(task['id']) in task_id_list]
                     else:
-                        new_tasks = [task for task in new_tasks if int(task['id']) not in range(179,375)]
+                        new_tasks = [task for task in new_tasks if int(task['id'])]
                     if new_tasks:
                         try:
                             self.update_tasks_in_csv(new_tasks)
@@ -107,11 +129,15 @@ class TaskStatusLogger:
         for task in tasks:
             task_id = task['id']
             if task_id not in current_tasks:
+                zip_path = task['Zip_Path']
+                zip_size = self.get_zip_file_size(zip_path)
+                
                 # Add new task
                 current_tasks[task_id] = {
                     'id': task_id,
                     'Steam_Game_Name': task['game_name'],
-                    'Zip_Path': task['Zip_Path'],
+                    'Zip_Path': zip_path,
+                    'Zip_Size': str(zip_size) if zip_size is not None else '',
                     'Status': 'unprocessed',
                     'USMap_Path': '',
                     'Error_Detail': task.get('info', ''),
@@ -125,7 +151,8 @@ class TaskStatusLogger:
                     self.send_webhook({
                         'type': 'new_task',
                         'task_id': task_id,
-                        'Zip_Path': task['Zip_Path'],
+                        'Zip_Path': zip_path,
+                        'Zip_Size': zip_size if zip_size is not None else 'unknown',
                         'game_name': task['game_name'],
                         'status': 'unprocessed',
                         'timestamp': timestamp
@@ -166,7 +193,7 @@ class TaskStatusLogger:
         try:
             with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=[
-                    'id', 'Steam_Game_Name', 'Zip_Path', 'Status', 'USMap_Path', 
+                    'id', 'Steam_Game_Name', 'Zip_Path', 'Zip_Size', 'Status', 'USMap_Path', 
                     'Error_Detail', 'Last_Updated'
                 ])
                 writer.writeheader()
@@ -176,7 +203,8 @@ class TaskStatusLogger:
 
     def get_unprocessed_tasks(self, limit=5):
         """
-        Get a list of unprocessed tasks from the CSV
+        Get a list of unprocessed tasks from the CSV, sorted by zip file size in ascending order.
+        This prioritizes processing smaller files first.
         
         Args:
             limit (int): Maximum number of tasks to return
@@ -186,7 +214,29 @@ class TaskStatusLogger:
         """
         tasks = self.load_current_tasks()
         unprocessed = [task for task in tasks.values() if task['Status'] == 'unprocessed']
-        return unprocessed[:limit]
+        
+        # Convert Zip_Size to float for sorting (default to float('inf') if empty or invalid)
+        def get_size(task):
+            try:
+                size_str = task.get('Zip_Size', '')
+                if size_str and size_str.strip():
+                    return float(size_str)
+                return float('inf')  # Put tasks with no size at the end
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid zip size value for task {task['id']}: {task.get('Zip_Size')}")
+                return float('inf')  # Put tasks with invalid size at the end
+        
+        # Sort by size (ascending)
+        sorted_tasks = sorted(unprocessed, key=get_size)
+        
+        # Log sorting results
+        if sorted_tasks:
+            logger.info(f"Sorted {len(sorted_tasks)} unprocessed tasks by size (ascending)")
+            for task in sorted_tasks[:min(limit, 5)]:  # Log the first few tasks that will be processed
+                size = task.get('Zip_Size', 'unknown')
+                logger.info(f"  Task {task['id']}: {task['Steam_Game_Name']} - Size: {size} MB")
+        
+        return sorted_tasks[:limit]
 
     def update_task_status(self, task_id, status, usmap_path=None, error_detail=None):
         """
@@ -259,7 +309,7 @@ class TaskStatusLogger:
         
         # 构建消息内容
         if data['type'] == 'new_task':
-            content = f"🆕 新任务添加:\n任务ID: {data['task_id']}\n游戏: {data['game_name']}\n状态: {data['status']}\n时间: {data['timestamp']}"
+            content = f"🆕 新任务添加:\n任务ID: {data['task_id']}\n游戏: {data['game_name']}\n大小: {data['Zip_Size']} MB\n状态: {data['status']}\n时间: {data['timestamp']}"
         elif data['type'] == 'status_change':
             content = f"📝 任务状态更新:\n任务ID: {data['task_id']}\n游戏: {data['game_name']}\n状态: {data['old_status']} -> {data['new_status']}"
             if data['usmap_path']:
@@ -311,6 +361,6 @@ if __name__ == "__main__":
         unprocessed = task_logger.get_unprocessed_tasks()
         print(f"Unprocessed tasks: {len(unprocessed)}")
         for task in unprocessed:
-            print(f"  {task['id']}: {task['Steam_Game_Name']}")
+            print(f"  {task['id']}: {task['Steam_Game_Name']} ({task.get('Zip_Size', 'unknown')} MB)")
     else:
         print("No tasks found or error occurred") 

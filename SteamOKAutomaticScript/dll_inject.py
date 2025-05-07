@@ -466,7 +466,9 @@ class DLLInjector:
 
             logger.debug("Activating DLL Injector window")
             window = windows[0]
-            window.activate()
+            if not window.isActive:
+                pg.press('altleft')
+                window.activate()
             time.sleep(1)
 
             try:
@@ -554,7 +556,7 @@ class DLLInjector:
             return {"success": False, "error_type": "exception", "data": str(e)}
 
         
-    def run_injection_process(self, launch_from_steam=True, before_processes=None):
+    def run_injection_process(self, launch_from_steam=True, pid=None):
         """
         Full process: activate Steam window, detect playable button, click it, get game process, and inject DLL
         Returns a dictionary with:
@@ -567,9 +569,9 @@ class DLLInjector:
             logger.info(f"Using game folder: {self.game_folder}")
         else:
             logger.info("No game folder specified, will detect any new process")
-        
-        logger.info("Recording processes before game launch...")
-        if before_processes is None:
+
+        if not pid:
+            logger.info("Recording processes before game launch...")
             before_processes = self.get_running_processes()
 
         if launch_from_steam:
@@ -599,34 +601,36 @@ class DLLInjector:
         for _ in tqdm(range(game_launch_time), desc="Waiting for game launch", unit="s"):
             time.sleep(1)
 
-        logger.info("Recording processes after game launch...")
-        after_processes = self.get_running_processes()
+        if not pid:
+            logger.info("Recording processes after game launch...")
+            after_processes = self.get_running_processes()
         
-        game_process = self.find_new_game_process(before_processes, after_processes)
+            game_process = self.find_new_game_process(before_processes, after_processes)
         
-        if not game_process:
-            logger.error("Failed to detect game process")
-            return {"success": False, "error_type": "game_process_not_detected", "data": None}
-        
+            if not game_process:
+                logger.error("Failed to detect game process")
+                return {"success": False, "error_type": "game_process_not_detected", "data": None}
+            
         logger.info("Minimizing all windows (Win + D)...")
         pg.hotkey('win', 'd')
         time.sleep(self.sleep_config['minimize_wait'])
         
-        pid = game_process["pid"]
+        if not pid:
+            pid = game_process["pid"]
         injection_result = self.inject_dll(pid)
         
         # Simply return the injection result, which is already in the correct format
         return injection_result
 
 
-    def run_injection_process_with_retry(self, max_retries=3, launch_from_steam=True, before_processes=None):
+    def run_injection_process_with_retry(self, max_retries=3, launch_from_steam=True, pid=None):
         """
         Run the injection process with retry logic
         """
         result = None
         for attempt in range(max_retries):
             logger.info(f"Injection Attempt {attempt + 1} of {max_retries}...")
-            result = self.run_injection_process(launch_from_steam, before_processes)
+            result = self.run_injection_process(launch_from_steam, pid)
             
             if result["success"]:
                 return result
