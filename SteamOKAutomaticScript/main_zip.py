@@ -318,6 +318,14 @@ def process_task(task_id, zip_path, output_folder, base_url, injector, csv_logge
             logger.info(f"Game {game_name} is playable, starting DLL injection process...")
             injector.game_folder = extract_folder
             inject_result = injector.run_injection_process_with_retry(launch_from_steam=False, before_processes=before_processes)
+            
+            # Get the latest log directory if available
+            log_dir = None
+            if hasattr(injector, 'latest_log_dir') and injector.latest_log_dir:
+                log_dir = injector.latest_log_dir
+                logger.info(f"Injection log directory for {game_name}: {log_dir}")
+            
+            
             if inject_result["success"]:
                 usmap_path = inject_result["data"]
                 if usmap_path:  # If USMap path was found
