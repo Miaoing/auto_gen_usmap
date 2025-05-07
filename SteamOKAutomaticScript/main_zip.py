@@ -154,7 +154,7 @@ def find_exe(extract_folder):
                     file_lower = file.lower()
                     
                     # Skip excluded executables
-                    if 'prereqsetup' in file_lower or 'crashreportclient' in file_lower:
+                    if 'prereqsetup' in file_lower or 'crashreportclient' in file_lower or '_commonredist' in file_lower or 'setup' in file_lower:
                         logger.info(f"Skipping excluded executable: {exe_path}")
                         continue
                     
