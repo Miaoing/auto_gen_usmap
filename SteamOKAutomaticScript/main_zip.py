@@ -141,6 +141,7 @@ def find_exe(extract_folder):
     Returns a list of executables sorted by priority
     """
     try:
+        excluded_exes = ['prereqsetup', 'crashreportclient', '_commonredist', 'setup', 'epicwebhelper', 'crashpad', 'unreal']
         # Lists to store found executables by priority
         shipping_exes = []
         other_exes = []
@@ -154,7 +155,7 @@ def find_exe(extract_folder):
                     file_lower = file.lower()
                     
                     # Skip excluded executables
-                    if 'prereqsetup' in file_lower or 'crashreportclient' in file_lower or '_commonredist' in file_lower or 'setup' in file_lower:
+                    if any(excluded_exe in file_lower for excluded_exe in excluded_exes):
                         logger.info(f"Skipping excluded executable: {exe_path}")
                         continue
                     
